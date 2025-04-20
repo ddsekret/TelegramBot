@@ -20,14 +20,14 @@ TRAILER_BRANDS = {
 }
 
 CAR_BRANDS = {
-    "вольво": "ВОЛЬВО",
-    "волво": "ВОЛЬВО",
-    "скания": "СКАНИЯ",
+    "вольво": "Вольво",
+    "волво": "volvo",
+    "скания": "Скания",
     "ман": "MAN",
     "мерседес": "MERSEDES-BENZ",
     "мерседес-бенз": "MERSEDES-BENZ",
     "даф": "ДАФ",
-    "фотон": "ФОТОН",
+    "фотон": "Фотон",
 }
 
 def validate_date(date_str):
@@ -88,7 +88,7 @@ def parse_phone_numbers(text):
     logger.debug(f"Найден номер паспорта для фильтрации: {passport_number}")
 
     phone_pattern = re.compile(
-        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?\d[\d\s\-\(\)]{9,14})|"
+        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?[\d\s\-\(\)]{9,14})|"
         r"(?<!\d)(\+?[\d\s\-\(\)]{10,14})(?!\d)",
         re.IGNORECASE
     )
@@ -196,12 +196,12 @@ def parse_car_data(text):
         if number_match:
             letter1, digits, letters2, region = number_match.groups()
             if all(l.upper() in valid_letters for l in (letter1 + letters2.upper())):
-                number = f"{letter1.upper()} {digits} {letters2.upper()} {region}"
+                number = f"{letter1.upper()}{digits}{letters2.upper()}{region}"
                 if "№" in car_data:
                     number = f"№ {number}"
                 brand = car_data[:number_match.start()].strip()
                 brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
-                normalized_brand = CAR_BRANDS.get(brand_key, brand).upper()
+                normalized_brand = CAR_BRANDS.get(brand_key, brand)
                 result = f"{normalized_brand} {number}"
                 logger.debug(f"Данные автомобиля найдены: {result}")
                 return result
@@ -221,12 +221,12 @@ def parse_car_data(text):
                 flags=re.IGNORECASE
             ).strip()
             brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
-            normalized_brand = CAR_BRANDS.get(brand_key, brand).upper()
+            normalized_brand = CAR_BRANDS.get(brand_key, brand)
             number = number.replace(" ", "")
             number_parts = re.match(r"([А-ЯЁ])(\d{3})([А-ЯЁа-яё]{2})(\d{2,3})", number, re.IGNORECASE)
             if number_parts:
                 letter1, digits, letters2, region = number_parts.groups()
-                number = f"{letter1.upper()} {digits} {letters2.upper()} {region}"
+                number = f"{letter1.upper()}{digits}{letters2.upper()}{region}"
                 if "№" in text:
                     number = f"№ {number}"
                 result = f"{normalized_brand} {number}"
@@ -287,6 +287,7 @@ def parse_driver_data(text):
             if match:
                 series_number = match.group(1).strip()
                 series_number = re.sub(r'\s+', ' ', series_number)  # Нормализуем пробелы
+                series_number = re.sub(r'№\s*', '', series_number)  # Убираем №
                 data["Паспорт_серия_и_номер"] = series_number
             
             # Извлечение места выдачи
@@ -371,12 +372,12 @@ def parse_driver_data(text):
                     flags=re.IGNORECASE
                 ).strip()
                 brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
-                normalized_brand = CAR_BRANDS.get(brand_key, brand).upper()
+                normalized_brand = CAR_BRANDS.get(brand_key, brand)
                 number = number.replace(" ", "")
                 number_parts = re.match(r"([А-ЯЁ])(\d{3})([А-ЯЁа-яё]{2})(\d{2,3})", number, re.IGNORECASE)
                 if number_parts:
                     letter1, digits, letters2, region = number_parts.groups()
-                    number = f"{letter1.upper()} {digits} {letters2.upper()} {region}"
+                    number = f"{letter1.upper()}{digits}{letters2.upper()}{region}"
                     if "№" in line:
                         number = f"№ {number}"
                 data["Автомобиль"] = f"{normalized_brand} {number}"
@@ -396,7 +397,7 @@ def parse_carrier_data(text):
         text,
         re.IGNORECASE
     )
-    if fio_match:
+    if fio_match and "ИП" in text.upper():
         data["Имя перевозчика"] = fio_match.group(1).strip()
 
     # Извлечение типа организации и названия
