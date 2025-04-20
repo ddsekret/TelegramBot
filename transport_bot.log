@@ -1,0 +1,13 @@
+2025-02-04 17:19:44,894 - __main__ - INFO - Created backup: backup_20250204_171944.xlsx
+2025-02-04 17:20:20,623 - __main__ - ERROR - Error in wrapper: start_command() got an unexpected keyword argument 'dispatcher'
+Traceback (most recent call last):
+  File "C:\Users\Dsekr\TelegramBot\bot.py", line 104, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dsekr\TelegramBot\bot.py", line 117, in wrapper
+    return await func(message, *args, **kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: start_command() got an unexpected keyword argument 'dispatcher'
+2025-02-04 17:32:32,230 - __main__ - INFO - Bot stopped
+2025-02-04 23:18:08,005 - __main__ - INFO - Created backup: backup_20250204_231807.xlsx
+2025-02-04 23:35:05,640 - __main__ - INFO - Bot stopped

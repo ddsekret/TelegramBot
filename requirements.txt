@@ -1,0 +1,8 @@
+pandas
+openpyxl
+google-cloud-speech
+aiogram
+yadisk
+speechrecognition
+natasha
+word2number
