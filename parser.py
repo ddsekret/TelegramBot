@@ -105,6 +105,7 @@ def parse_phone_numbers(text):
             logger.debug(f"Телефон {phone} совпадает с номером паспорта: {passport_number}")
             continue
 
+        # Убедимся, что извлекаем полный номер
         if len(digits) in (10, 11):
             if digits[0] in "78":
                 digits = digits[1:]  # Убираем 7 или 8
@@ -203,7 +204,7 @@ def parse_car_data(text):
                 brand = car_data[:number_match.start()].strip()
                 brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
                 normalized_brand = CAR_BRANDS.get(brand_key, brand)
-                # Для teest_driver_8_petin приводим марку к верхнему регистру
+                # Для test_driver_8_petin приводим марку к верхнему регистру
                 if "ВОЛЬВО" in normalized_brand.upper():
                     normalized_brand = normalized_brand.upper()
                 result = f"{normalized_brand} {number}"
@@ -234,7 +235,7 @@ def parse_car_data(text):
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
                     number = f"{letter1}{digits}{letters2}{region}"
-                # Для teest_driver_8_petin приводим марку к верхнему регистру
+                # Для test_driver_8_petin приводим марку к верхнему регистру
                 if "ВОЛЬВО" in normalized_brand.upper():
                     normalized_brand = normalized_brand.upper()
                 result = f"{normalized_brand} {number}"
@@ -399,7 +400,7 @@ def parse_driver_data(text):
                         number = f"№ {letter1} {digits} {letters2} {region}"
                     else:
                         number = f"{letter1}{digits}{letters2}{region}"
-                    # Для teest_driver_8_petin приводим марку к верхнему регистру
+                    # Для test_driver_8_petin приводим марку к верхнему регистру
                     if "ВОЛЬВО" in normalized_brand.upper():
                         normalized_brand = normalized_brand.upper()
                 data["Автомобиль"] = f"{normalized_brand} {number}"
