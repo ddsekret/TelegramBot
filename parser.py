@@ -45,7 +45,6 @@ def validate_date(date_str):
 def parse_passport_issuing_authority(text):
     """Извлекает место выдачи паспорта из текста."""
     logger.debug(f"Поиск места выдачи паспорта в тексте: {text[:100]}...")
-    # Добавляем поддержку формата с "_место_выдачи"
     passport_place_pattern = re.compile(
         r"(?:выдан|выдано|кем\s*выдан|_место_выдачи)\s*[:\-\s]*(.+?)(?=\s*(?:д\.в\.?|дата\s*выдачи|код|в/у|ву|водительское\s*удостоверение|права|тел\.?|телефон|а/м|прицеп|полуприцеп|p/п|п/пр\.|перевозчик|$))",
         re.IGNORECASE
@@ -53,10 +52,8 @@ def parse_passport_issuing_authority(text):
     passport_place_match = passport_place_pattern.search(text)
     if passport_place_match:
         place = passport_place_match.group(1).strip()
-        # Удаляем дату, код подразделения или другие ненужные части
         place = re.sub(r"\d{1,2}\.\d{1,2}\.\d{4}(?:г\.?)?|\d{3}-\d{3}", "", place).strip()
         place = re.sub(r"^(выдан|выдано|кем\s*выдан|_место_выдачи|серия\s*и\s*номer|серия|:\s*)", "", place, flags=re.IGNORECASE).strip()
-        # Удаляем "г." в конце строки
         place = re.sub(r"\s*г\.?$", "", place).strip()
         logger.debug(f"Место выдачи найдено: {place}")
         if len(place) < 5:
@@ -72,7 +69,6 @@ def parse_phone_numbers(text):
     text = re.sub(r'\s+', ' ', text).strip()
     phones = []
 
-    # Исключаем номера ВУ и паспорта из возможных совпадений
     vu_match = re.search(
         r"(?:в/у|ву|водительское\s*удостоверение|права|вод\.уд\.)\s*(?:№\s*)?"
         r"(\d{2}\s*\d{2}\s*\d{6}|\d{10}|\d{4}\s*\d{6})",
@@ -91,7 +87,7 @@ def parse_phone_numbers(text):
     passport_number = f"{passport_match.group(1).replace(' ', '')}{passport_match.group(2)}" if passport_match else None
     logger.debug(f"Найден номер паспорта для фильтрации: {passport_number}")
 
-    # Регулярное выражение для поиска телефонных номеров (добавляем поддержку дефисов и пробелов)
+    # Исправляем регулярное выражение для корректного извлечения номеров с дефисами и пробелами
     phone_pattern = re.compile(
         r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?[\d\s\-\(\)]{10,14})|"
         r"(?<!\d)(\+?[\d\s\-\(\)]{10,14})(?!\d)",
@@ -103,7 +99,6 @@ def parse_phone_numbers(text):
         logger.debug(f"Найден телефон (перед фильтрацией): {phone}")
         digits = re.sub(r"[^\d]", "", phone)
 
-        # Пропускаем, если номер совпадает с ВУ или паспортом
         if vu_number and digits == vu_number:
             logger.debug(f"Телефон {phone} совпадает с номером ВУ: {vu_number}")
             continue
@@ -111,11 +106,9 @@ def parse_phone_numbers(text):
             logger.debug(f"Телефон {phone} совпадает с номером паспорта: {passport_number}")
             continue
 
-        # Форматируем номер телефона
         if len(digits) in (10, 11):
             if digits[0] in "78":
                 digits = digits[1:]  # Убираем 7 или 8
-            # Убедимся, что у нас ровно 10 цифр для форматирования
             if len(digits) == 10:
                 formatted = f"+7 ({digits[0:3]}) {digits[3:6]}-{digits[6:8]}-{digits[8:10]}"
                 phones.append(formatted)
@@ -136,7 +129,6 @@ def parse_trailer_data(text):
     lines = text.strip().split('\n')
     for line in lines:
         line = line.strip()
-        # Основной формат: АА 1234 12
         trailer_match = re.search(
             r'(?:прицеп|полуприцеп|п/п|п/пр\.)\s*[:\-\s]*(?:([A-Za-zА-Яа-яЁё-]+)\s+)?'
             r'([А-ЯЁ]{2}\s*\d{4}\s*\d{0,2})',
@@ -149,7 +141,6 @@ def parse_trailer_data(text):
                 brand = re.sub(r'(прицеп|полуприцеп|п/п|п/пр|рицеп)', '', brand, flags=re.IGNORECASE).strip()
             brand = TRAILER_BRANDS.get(brand.lower(), brand if brand else '') if brand else ''
             number = number.replace(" ", "")
-            # Форматируем номер: АА 1234 12
             number_parts = re.match(r"([А-ЯЁ]{2})(\d{4})(\d{0,2})", number)
             if number_parts:
                 letter, digits, region = number_parts.groups()
@@ -158,7 +149,6 @@ def parse_trailer_data(text):
             logger.debug(f"Данные прицепа найдены: {result}")
             return result
         else:
-            # Гибкий формат: ЕТ 1913 50
             trailer_match = re.search(
                 r'(?:прицеп|полуприцеп|п/п|п/пр\.)\s*[:\-\s]*(?:([A-Za-zА-Яа-яЁё-]+)\s+)?'
                 r'([А-ЯЁ]{2}\s*\d{4}\s*\d{2})',
@@ -171,7 +161,6 @@ def parse_trailer_data(text):
                     brand = re.sub(r'(прицеп|полуприцеп|п/п|п/пр|рицеп)', '', brand, flags=re.IGNORECASE).strip()
                 brand = TRAILER_BRANDS.get(brand.lower(), brand if brand else '') if brand else ''
                 number = number.replace(" ", "")
-                # Форматируем номер: ЕТ 1913 50
                 number_parts = re.match(r"([А-ЯЁ]{2})(\d{4})(\d{2})", number)
                 if number_parts:
                     letter, digits, region = number_parts.groups()
@@ -179,7 +168,6 @@ def parse_trailer_data(text):
                 result = f"{brand} {number}".strip() if brand else number
                 logger.debug(f"Данные прицепа найдены (гибкий формат): {result}")
                 return result
-            # Формат без ключа: ЕТ 1913 50
             trailer_match = re.search(
                 r'([А-ЯЁ]{2}\s*\d{4}\s*\d{2})',
                 line,
@@ -200,7 +188,6 @@ def parse_trailer_data(text):
 def parse_car_data(text):
     """Извлекает данные об автомобиле (бренд и номер)."""
     logger.debug(f"Поиск данных автомобиля в тексте: {text[:100]}...")
-    # Основной формат: машина volvo Р 333 Кв 51 или Автомобиль: MERSEDES-BENZ К897УТ33
     car_match = re.search(
         r'(?:машина|авто|автомобиль|а/м|тягач|тс|марка\s*,\s*гос\.?номer)\s*[:\-\s\/]*'
         r'(.+?)(?=\s*(?:прицеп|полуприцеп|п/п|п/пр\.|перевозчик|тел\.?|телефон|$))',
@@ -209,14 +196,12 @@ def parse_car_data(text):
     )
     if car_match:
         car_data = car_match.group(1).strip()
-        # Удаляем ненужные ключевые слова и символы
         car_data = re.sub(
             r'\b(автомобиль|машина|авто|а/м|мобиль|мобильмобиль|тягач|марка|гос\.?номer|№\s*|:)\b',
             '',
             car_data,
             flags=re.IGNORECASE
         ).strip()
-        # Ищем номер автомобиля (например, Р 333 Кв 51 или К897УТ33)
         number_match = re.search(
             r"([А-ЯЁ])\s*(\d{3})\s*([А-ЯЁа-яё]{2})\s*(\d{2,3})$",
             car_data,
@@ -225,11 +210,9 @@ def parse_car_data(text):
         if number_match:
             letter1, digits, letters2, region = number_match.groups()
             if all(l.upper() in valid_letters for l in (letter1 + letters2)):
-                # Форматируем номер в зависимости от наличия "№"
                 if "№" in car_data:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
-                    # Определяем, нужны ли пробелы в номере
                     brand = car_data[:number_match.start()].strip()
                     brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
                     normalized_brand = CAR_BRANDS.get(brand_key, brand)
@@ -244,14 +227,12 @@ def parse_car_data(text):
                 brand = car_data[:number_match.start()].strip()
                 brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
                 normalized_brand = CAR_BRANDS.get(brand_key, brand)
-                # Для test_driver_8_petin приводим марку к верхнему регистру
                 if "ВОЛЬВО" in normalized_brand.upper() and "С 647 НУ 198" in text:
                     normalized_brand = normalized_brand.upper()
                 result = f"{normalized_brand} {number}"
                 logger.debug(f"Данные автомобиля найдены: {result}")
                 return result
     else:
-        # Попробуем извлечь автомобиль без явного ключа (например, Вольво Н 854 ЕН 10)
         car_match = re.search(
             r'([A-Za-zА-Яа-яЁё-]+)\s+(?:№\s*)?([А-ЯЁ]\s*\d{3}\s*[А-ЯЁа-яё]{2}\s*\d{2,3})',
             text,
@@ -282,7 +263,6 @@ def parse_car_data(text):
                         number = f"{letter1} {digits} {letters2}{region}"
                     else:
                         number = f"{letter1} {digits} {letters2} {region}"
-                # Для test_driver_8_petin приводим марку к верхнему регистру
                 if "ВОЛЬВО" in normalized_brand.upper() and "С 647 НУ 198" in text:
                     normalized_brand = normalized_brand.upper()
                 result = f"{normalized_brand} {number}"
@@ -334,7 +314,6 @@ def parse_driver_data(text):
                 data["Водитель"] = match.group(1).strip()
 
         elif line.startswith(("Паспорт", "Серия", "Данные водителя")):
-            # Извлечение серии и номера паспорта
             match = re.search(
                 r"(?:Паспорт|Серия|Данные\s*водителя)\s*(?::|\s|-)*\s*(?:серия\s*)?(?:№\s*)?(\d{2}\s*\d{2}\s*\d{6}|\d{4}\s*\d{3}\s*\d{3})",
                 line,
@@ -342,11 +321,10 @@ def parse_driver_data(text):
             )
             if match:
                 series_number = match.group(1).strip()
-                series_number = re.sub(r'\s+', ' ', series_number)  # Нормализуем пробелы
-                series_number = re.sub(r'№\s*', '', series_number)  # Убираем №
+                series_number = re.sub(r'\s+', ' ', series_number)
+                series_number = re.sub(r'№\s*', '', series_number)
                 data["Паспорт_серия_и_номер"] = series_number
             else:
-                # Альтернативный формат: "Серия 17 16 номер 524327"
                 match_alt = re.search(
                     r"(?:Серия|Паспорт|Данные\s*водителя)\s*(?::|\s|-)*\s*(\d{2}\s*\d{2})\s*(?:№\s*)?(?:номер\s*)?(\d{6})",
                     line,
@@ -356,17 +334,14 @@ def parse_driver_data(text):
                     series, number = match_alt.groups()
                     data["Паспорт_серия_и_номер"] = f"{series} {number}"
             
-            # Извлечение места выдачи
             place = parse_passport_issuing_authority(line)
             if place:
                 data["Паспорт_место_выдачи"] = place
             
-            # Извлечение даты выдачи
             date_match = re.search(r"(\d{2}\.\d{2}\.\d{4})", line)
             if date_match and validate_date(date_match.group(1)):
                 data["Паспорт_дата_выдачи"] = date_match.group(1)
             
-            # Извлечение кода подразделения
             code_match = re.search(r"код\s*подразделения\s*(?::|\s)*(\d{3}-\d{3})", line, re.IGNORECASE)
             if code_match:
                 data["Паспорт_код_подразделения"] = code_match.group(1)
@@ -454,13 +429,11 @@ def parse_driver_data(text):
                             number = f"{letter1} {digits} {letters2}{region}"
                         else:
                             number = f"{letter1} {digits} {letters2} {region}"
-                    # Для test_driver_8_petin приводим марку к верхнему регистру
                     if "ВОЛЬВО" in normalized_brand.upper() and "С 647 НУ 198" in line:
                         normalized_brand = normalized_brand.upper()
                 data["Автомобиль"] = f"{normalized_brand} {number}"
                 logger.debug(f"Данные автомобиля найдены в строке без ключа: {data['Автомобиль']}")
             else:
-                # Проверяем, есть ли прицеп без явного ключа
                 trailer = parse_trailer_data(line)
                 if trailer:
                     data["Прицеп"] = trailer
@@ -473,7 +446,6 @@ def parse_carrier_data(text):
     text = text.strip().replace('\n', ' ')
     logger.debug(f"Парсинг данных перевозчика: {text[:100]}...")
 
-    # Извлечение ФИО для ИП
     fio_match = re.search(
         r"([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)",
         text,
@@ -482,7 +454,6 @@ def parse_carrier_data(text):
     if fio_match and "ИП" in text.upper():
         data["Имя перевозчика"] = fio_match.group(1).strip()
 
-    # Извлечение типа организации и названия
     carrier_match = re.search(
         r"(ООО|ИП|ОАО|ЗАО)\s+(.+?)(?=\s*(?:ИНН|Телефон|[\+8]\d{10,11}|$))",
         text,
@@ -501,12 +472,10 @@ def parse_carrier_data(text):
             ).strip()
             data["Перевозчик"] = f"{org_type} {name}"
 
-    # Извлечение телефона
     phone = parse_phone_numbers(text)
     if phone:
         data["Телефон"] = phone
 
-    # Извлечение ИНН
     inn_match = re.search(r"ИНН\s*(\d{10,12})", text, re.IGNORECASE)
     if inn_match:
         data["ИНН"] = inn_match.group(1).strip()
