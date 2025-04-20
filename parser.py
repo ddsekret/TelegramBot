@@ -491,7 +491,7 @@ def parse_carrier_data(text):
     if carrier_match:
         org_type, name = carrier_match.groups()
         name = name.strip()
-        if org_type.upper() == "ИП" и fio_match:
+        if org_type.upper() == "ИП" and fio_match:
             data["Перевозчик"] = f"ИП {fio_match.group(1).strip()}"
         else:
             name = re.sub(
