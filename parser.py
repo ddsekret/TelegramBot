@@ -398,30 +398,73 @@ def parse_carrier_data(text):
     data = {}
     text = text.strip().replace('\n', ' ')
     
-    patterns = {
-        "Перевозчик": r"Перевозчик\s*:\s*(.+?)(?=\s*(?:Имя|Телефон|ИНN|$))",
-        "Имя": r"Имя\s*:\s*([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)",
-        "Телефон": r"(?:Телефон\s*:\s*|Телефон\s+)?(\+?\d\s*\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2}|\d\s*\d{3}\s*\d{3}\d{2}\d{2})",
-        "ИНN": r"ИНN\s*(\d+)",
-    }
-
-    for key, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            if key == "Телефон":
-                data[key] = parse_phone_numbers(match.group(1).strip())
-            elif key == "Имя":
-                data["Имя перевозчика"] = match.group(1).strip()
-            else:
-                data[key] = match.group(1).strip()
-
-    if "Перевозчик" not in data:
+    # Извлечение перевозчика (только ФИО, если есть Имя)
+    carrier_match = re.search(
+        r"(ООО|ИП|ОАО|ЗАО)\s+([^\s].+?)(?=\s*(?:Имя|Телефон|ИНN|$))",
+        text,
+        re.IGNORECASE
+    )
+    if carrier_match:
+        org_type, carrier_name = carrier_match.groups()
+        # Проверяем, есть ли ФИО после слова "Имя"
+        name_match = re.search(
+            r"Имя\s*:\s*([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)",
+            text,
+            re.IGNORECASE
+        )
+        if name_match:
+            # Если есть ФИО, используем его как имя перевозчика
+            data["Перевозчик"] = f"{org_type} {name_match.group(1).strip()}"
+        else:
+            # Убираем лишние пробелы и возможные номера телефонов или ИНН из названия
+            carrier_name = re.sub(
+                r"(?:\+?\d\s*\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2}|\d\s*\d{3}\s*\d{3}\d{2}\d{2}|\d{10,12})",
+                "",
+                carrier_name
+            ).strip()
+            data["Перевозчик"] = f"{org_type} {carrier_name}"
+    else:
+        # Пробуем извлечь перевозчика без явного формата (например, ООО +7 (987) 654-32-10)
         carrier_match = re.search(
-            r"^(ООО|ИП|ОАО|ЗАО)\s+(.+?)(?=\s*(?:Имя|Телефон|ИНN|$))",
+            r"(ООО|ИП|ОАО|ЗАО)\s*(\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2})",
             text,
             re.IGNORECASE
         )
         if carrier_match:
-            data["Перевозчик"] = f"{carrier_match.group(1)} {carrier_match.group(2).strip()}"
+            org_type, phone = carrier_match.groups()
+            data["Перевозчик"] = f"{org_type} {phone}"
+    
+    # Извлечение имени перевозчика
+    if "Имя перевозчика" not in data:
+        name_match = re.search(
+            r"Имя\s*:\s*([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)",
+            text,
+            re.IGNORECASE
+        )
+        if name_match:
+            data["Имя перевозчика"] = name_match.group(1).strip()
+
+    # Извлечение телефона (даже если нет слова "Телефон")
+    phone_match = re.search(
+        r"(?:Телефон\s*:\s*|Телефон\s+)?(\+?\d\s*\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2}|\d\s*\d{3}\s*\d{3}\d{2}\d{2}|\d{10,11})",
+        text,
+        re.IGNORECASE
+    )
+    if phone_match:
+        data["Телефон"] = parse_phone_numbers(phone_match.group(1).strip())
+    else:
+        # Если телефон не найден в явном формате, ищем его в строке перевозчика
+        phone_match = re.search(
+            r"(ООО|ИП|ОАО|ЗАО)\s*(\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2})",
+            text,
+            re.IGNORECASE
+        )
+        if phone_match:
+            data["Телефон"] = parse_phone_numbers(phone_match.group(2).strip())
+
+    # Извлечение ИНН
+    inn_match = re.search(r"ИНN\s*(\d+)", text, re.IGNORECASE)
+    if inn_match:
+        data["ИНN"] = inn_match.group(1).strip()
 
     return data
