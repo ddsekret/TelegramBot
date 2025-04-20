@@ -176,6 +176,21 @@ def parse_trailer_data(text):
                 result = f"{brand} {number}".strip() if brand else number
                 logger.debug(f"Данные прицепа найдены (гибкий формат): {result}")
                 return result
+            # Формат без ключа: ЕТ 1913 50
+            trailer_match = re.search(
+                r'([А-ЯЁ]{2}\s*\d{4}\s*\d{2})',
+                line,
+                re.IGNORECASE
+            )
+            if trailer_match:
+                number = trailer_match.group(1).replace(" ", "")
+                number_parts = re.match(r"([А-ЯЁ]{2})(\d{4})(\d{2})", number)
+                if number_parts:
+                    letter, digits, region = number_parts.groups()
+                    number = f"{letter} {digits} {region}"
+                result = number
+                logger.debug(f"Данные прицепа найдены в строке без ключа: {result}")
+                return result
     logger.debug("Данные прицепа не найдены")
     return None
 
@@ -222,7 +237,7 @@ def parse_car_data(text):
                     elif normalized_brand.lower() in ("даф",):
                         number = f"{letter1} {digits} {letters2}{region}"
                     else:
-                        number = f"{letter1} {digits}{letters2} {region}"
+                        number = f"{letter1} {digits} {letters2} {region}"
                 brand = car_data[:number_match.start()].strip()
                 brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
                 normalized_brand = CAR_BRANDS.get(brand_key, brand)
@@ -263,7 +278,7 @@ def parse_car_data(text):
                     elif normalized_brand.lower() in ("даф",):
                         number = f"{letter1} {digits} {letters2}{region}"
                     else:
-                        number = f"{letter1} {digits}{letters2} {region}"
+                        number = f"{letter1} {digits} {letters2} {region}"
                 # Для test_driver_8_petin приводим марку к верхнему регистру
                 if "ВОЛЬВО" in normalized_brand.upper() and "С 647 НУ 198" in text:
                     normalized_brand = normalized_brand.upper()
@@ -435,12 +450,17 @@ def parse_driver_data(text):
                         elif normalized_brand.lower() in ("даф",):
                             number = f"{letter1} {digits} {letters2}{region}"
                         else:
-                            number = f"{letter1} {digits}{letters2} {region}"
+                            number = f"{letter1} {digits} {letters2} {region}"
                     # Для test_driver_8_petin приводим марку к верхнему регистру
                     if "ВОЛЬВО" in normalized_brand.upper() and "С 647 НУ 198" in line:
                         normalized_brand = normalized_brand.upper()
                 data["Автомобиль"] = f"{normalized_brand} {number}"
                 logger.debug(f"Данные автомобиля найдены в строке без ключа: {data['Автомобиль']}")
+            else:
+                # Проверяем, есть ли прицеп без явного ключа
+                trailer = parse_trailer_data(line)
+                if trailer:
+                    data["Прицеп"] = trailer
 
     return data
 
