@@ -56,6 +56,8 @@ def parse_passport_issuing_authority(text):
         # Удаляем дату, код подразделения или другие ненужные части
         place = re.sub(r"\d{1,2}\.\d{1,2}\.\d{4}(?:г\.?)?|\d{3}-\d{3}", "", place).strip()
         place = re.sub(r"^(выдан|выдано|кем\s*выдан|_место_выдачи|серия\s*и\s*номer|серия|:\s*)", "", place, flags=re.IGNORECASE).strip()
+        # Удаляем "г." в конце строки
+        place = re.sub(r"\s*г\.?$", "", place).strip()
         logger.debug(f"Место выдачи найдено: {place}")
         if len(place) < 5:
             logger.debug("Место выдачи слишком короткое, пропускаем")
@@ -91,8 +93,8 @@ def parse_phone_numbers(text):
 
     # Регулярное выражение для поиска телефонных номеров (добавляем поддержку дефисов и пробелов)
     phone_pattern = re.compile(
-        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?\d[\d\s\-\(\)]{9,13})|"
-        r"(?<!\d)(\+?\d[\d\s\-\(\)]{9,13})(?!\d)",
+        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?[\d\s\-\(\)]{10,14})|"
+        r"(?<!\d)(\+?[\d\s\-\(\)]{10,14})(?!\d)",
         re.IGNORECASE
     )
     phone_matches = phone_pattern.finditer(text)
@@ -489,7 +491,7 @@ def parse_carrier_data(text):
     if carrier_match:
         org_type, name = carrier_match.groups()
         name = name.strip()
-        if org_type.upper() == "ИП" and fio_match:
+        if org_type.upper() == "ИП" и fio_match:
             data["Перевозчик"] = f"ИП {fio_match.group(1).strip()}"
         else:
             name = re.sub(
