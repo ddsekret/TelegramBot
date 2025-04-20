@@ -210,12 +210,12 @@ def parse_car_data(text):
         if number_match:
             letter1, digits, letters2, region = number_match.groups()
             if all(l.upper() in valid_letters for l in (letter1 + letters2)):
+                brand = car_data[:number_match.start()].strip()
+                brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
+                normalized_brand = CAR_BRANDS.get(brand_key, brand)
                 if "№" in car_data:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
-                    brand = car_data[:number_match.start()].strip()
-                    brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
-                    normalized_brand = CAR_BRANDS.get(brand_key, brand)
                     if normalized_brand.lower() in ("volvo",):
                         number = f"{letter1}{digits}{letters2}{region}"
                     elif normalized_brand.lower() in ("скания", "мерседес-бенз"):
@@ -224,11 +224,6 @@ def parse_car_data(text):
                         number = f"{letter1} {digits} {letters2}{region}"
                     else:
                         number = f"{letter1} {digits} {letters2} {region}"
-                brand = car_data[:number_match.start()].strip()
-                brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
-                normalized_brand = CAR_BRANDS.get(brand_key, brand)
-                if "ВОЛЬВО" in normalized_brand.upper() and "С 647 НУ 198" in text:
-                    normalized_brand = normalized_brand.upper()
                 result = f"{normalized_brand} {number}"
                 logger.debug(f"Данные автомобиля найдены: {result}")
                 return result
