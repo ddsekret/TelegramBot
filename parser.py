@@ -88,10 +88,10 @@ def parse_phone_numbers(text):
     passport_number = f"{passport_match.group(1).replace(' ', '')}{passport_match.group(2)}" if passport_match else None
     logger.debug(f"Найден номер паспорта для фильтрации: {passport_number}")
 
-    # Регулярное выражение для поиска телефонных номеров
+    # Регулярное выражение для поиска телефонных номеров (добавляем поддержку формата с дефисами)
     phone_pattern = re.compile(
-        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?[\d\s\-\(\)]{10,14})|"
-        r"(?<!\d)(\+?[\d\s\-\(\)]{10,14})(?!\d)",
+        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(?:\+?[\d\s\-\(\)]{10,14}|\d{1,3}[\s-]*\(\d{3}\)[\s-]*\d{3}[\s-]*\d{2}[\s-]*\d{2})|"
+        r"(?<!\d)(\+?[\d\s\-\(\)]{10,14}|\d{1,3}[\s-]*\(\d{3}\)[\s-]*\d{3}[\s-]*\d{2}[\s-]*\d{2})(?!\d)",
         re.IGNORECASE
     )
     phone_matches = phone_pattern.finditer(text)
@@ -211,7 +211,8 @@ def parse_car_data(text):
                 if "№" in car_data:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
-                    number = f"{letter1}{digits}{letters2}{region}"
+                    # Добавляем пробелы для всех марок, чтобы соответствовать ожидаемому формату
+                    number = f"{letter1} {digits} {letters2} {region}"
                 brand = car_data[:number_match.start()].strip()
                 brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
                 normalized_brand = CAR_BRANDS.get(brand_key, brand)
@@ -245,11 +246,8 @@ def parse_car_data(text):
                 if "№" in text:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
-                    # Форматируем номер с пробелами только для "Вольво" и "Фотон"
-                    if "Вольво" in normalized_brand or "Фотон" in normalized_brand:
-                        number = f"{letter1} {digits} {letters2} {region}"
-                    else:
-                        number = f"{letter1}{digits}{letters2}{region}"
+                    # Добавляем пробелы для всех марок, чтобы соответствовать ожидаемому формату
+                    number = f"{letter1} {digits} {letters2} {region}"
                 # Для test_driver_8_petin приводим марку к верхнему регистру
                 if "ВОЛЬВО" in normalized_brand.upper():
                     normalized_brand = normalized_brand.upper()
@@ -414,10 +412,7 @@ def parse_driver_data(text):
                     if "№" in line:
                         number = f"№ {letter1} {digits} {letters2} {region}"
                     else:
-                        if "Вольво" in normalized_brand or "Фотон" in normalized_brand:
-                            number = f"{letter1} {digits} {letters2} {region}"
-                        else:
-                            number = f"{letter1}{digits}{letters2}{region}"
+                        number = f"{letter1} {digits} {letters2} {region}"
                     # Для test_driver_8_petin приводим марку к верхнему регистру
                     if "ВОЛЬВО" in normalized_brand.upper():
                         normalized_brand = normalized_brand.upper()
