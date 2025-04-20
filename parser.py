@@ -90,7 +90,7 @@ def parse_phone_numbers(text):
 
     # Регулярное выражение для поиска телефонных номеров
     phone_pattern = re.compile(
-        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?[\d\s\-\(\)]{9,14})|"
+        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?[\d\s\-\(\)]{10,14})|"
         r"(?<!\d)(\+?[\d\s\-\(\)]{10,14})(?!\d)",
         re.IGNORECASE
     )
@@ -245,8 +245,8 @@ def parse_car_data(text):
                 if "№" in text:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
-                    # Форматируем номер с пробелами только если это ожидается
-                    if "ВОЛЬВО" in normalized_brand.upper() or "Фотон" in normalized_brand:
+                    # Форматируем номер с пробелами только для "Вольво" и "Фотон"
+                    if "Вольво" in normalized_brand or "Фотон" in normalized_brand:
                         number = f"{letter1} {digits} {letters2} {region}"
                     else:
                         number = f"{letter1}{digits}{letters2}{region}"
@@ -414,7 +414,7 @@ def parse_driver_data(text):
                     if "№" in line:
                         number = f"№ {letter1} {digits} {letters2} {region}"
                     else:
-                        if "ВОЛЬВО" in normalized_brand.upper() or "Фотон" in normalized_brand:
+                        if "Вольво" in normalized_brand or "Фотон" in normalized_brand:
                             number = f"{letter1} {digits} {letters2} {region}"
                         else:
                             number = f"{letter1}{digits}{letters2}{region}"
