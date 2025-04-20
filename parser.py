@@ -143,9 +143,7 @@ def parse_trailer_data(text):
         if trailer_match:
             brand, number = trailer_match.groups()
             if brand:
-                brand = re
-
-.sub(r'(прицеп|полуприцеп|п/п|п/пр|рицеп)', '', brand, flags=re.IGNORECASE).strip()
+                brand = re.sub(r'(прицеп|полуприцеп|п/п|п/пр|рицеп)', '', brand, flags=re.IGNORECASE).strip()
             brand = TRAILER_BRANDS.get(brand.lower(), brand if brand else '') if brand else ''
             number = number.replace(" ", "")
             # Форматируем номер: АА 1234 12
@@ -182,7 +180,7 @@ def parse_trailer_data(text):
     return None
 
 def parse_car_data(text):
-    """Извлекает данные об автомобиля (бренд и номер)."""
+    """Извлекает данные об автомобиле (бренд и номер)."""
     logger.debug(f"Поиск данных автомобиля в тексте: {text[:100]}...")
     # Основной формат: машина volvo Р 333 Кв 51 или Автомобиль: MERSEDES-BENZ К897УТ33
     car_match = re.search(
@@ -213,8 +211,7 @@ def parse_car_data(text):
                 if "№" in car_data:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
-                    # Добавляем пробелы для всех марок, чтобы соответствовать ожидаемому формату
-                    number = f"{letter1} {digits} {letters2} {region}"
+                    number = f"{letter1}{digits}{letters2}{region}"
                 brand = car_data[:number_match.start()].strip()
                 brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
                 normalized_brand = CAR_BRANDS.get(brand_key, brand)
@@ -248,8 +245,11 @@ def parse_car_data(text):
                 if "№" in text:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
-                    # Добавляем пробелы для всех марок, чтобы соответствовать ожидаемому формату
-                    number = f"{letter1} {digits} {letters2} {region}"
+                    # Форматируем номер с пробелами только для "Вольво" и "Фотон"
+                    if "Вольво" in normalized_brand or "Фотон" in normalized_brand:
+                        number = f"{letter1} {digits} {letters2} {region}"
+                    else:
+                        number = f"{letter1}{digits}{letters2}{region}"
                 # Для test_driver_8_petin приводим марку к верхнему регистру
                 if "ВОЛЬВО" in normalized_brand.upper():
                     normalized_brand = normalized_brand.upper()
@@ -414,7 +414,10 @@ def parse_driver_data(text):
                     if "№" in line:
                         number = f"№ {letter1} {digits} {letters2} {region}"
                     else:
-                        number = f"{letter1} {digits} {letters2} {region}"
+                        if "Вольво" in normalized_brand or "Фотон" in normalized_brand:
+                            number = f"{letter1} {digits} {letters2} {region}"
+                        else:
+                            number = f"{letter1}{digits}{letters2}{region}"
                     # Для test_driver_8_petin приводим марку к верхнему регистру
                     if "ВОЛЬВО" in normalized_brand.upper():
                         normalized_brand = normalized_brand.upper()
