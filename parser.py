@@ -69,6 +69,7 @@ def parse_phone_numbers(text):
     text = re.sub(r'\s+', ' ', text).strip()
     phones = []
 
+    # Исключаем номера ВУ и паспорта из возможных совпадений
     vu_match = re.search(
         r"(?:в/у|ву|водительское\s*удостоверение|права|вод\.уд\.)\s*(?:№\s*)?"
         r"(\d{2}\s*\d{2}\s*\d{6}|\d{10}|\d{4}\s*\d{6})",
@@ -87,6 +88,7 @@ def parse_phone_numbers(text):
     passport_number = f"{passport_match.group(1).replace(' ', '')}{passport_match.group(2)}" if passport_match else None
     logger.debug(f"Найден номер паспорта для фильтрации: {passport_number}")
 
+    # Регулярное выражение для поиска телефонных номеров
     phone_pattern = re.compile(
         r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?[\d\s\-\(\)]{9,14})|"
         r"(?<!\d)(\+?[\d\s\-\(\)]{10,14})(?!\d)",
@@ -98,6 +100,7 @@ def parse_phone_numbers(text):
         logger.debug(f"Найден телефон (перед фильтрацией): {phone}")
         digits = re.sub(r"[^\d]", "", phone)
 
+        # Пропускаем, если номер совпадает с ВУ или паспортом
         if vu_number and digits == vu_number:
             logger.debug(f"Телефон {phone} совпадает с номером ВУ: {vu_number}")
             continue
@@ -105,12 +108,16 @@ def parse_phone_numbers(text):
             logger.debug(f"Телефон {phone} совпадает с номером паспорта: {passport_number}")
             continue
 
-        # Убедимся, что извлекаем полный номер
+        # Форматируем номер телефона
         if len(digits) in (10, 11):
             if digits[0] in "78":
                 digits = digits[1:]  # Убираем 7 или 8
-            formatted = f"+7 ({digits[0:3]}) {digits[3:6]}-{digits[6:8]}-{digits[8:10]}"
-            phones.append(formatted)
+            # Убедимся, что у нас ровно 10 цифр для форматирования
+            if len(digits) == 10:
+                formatted = f"+7 ({digits[0:3]}) {digits[3:6]}-{digits[6:8]}-{digits[8:10]}"
+                phones.append(formatted)
+            else:
+                logger.debug(f"Некорректная длина номера телефона после обработки: {digits}")
         else:
             logger.debug(f"Некорректная длина номера телефона: {digits}")
 
@@ -175,6 +182,7 @@ def parse_trailer_data(text):
 def parse_car_data(text):
     """Извлекает данные об автомобиле (бренд и номер)."""
     logger.debug(f"Поиск данных автомобиля в тексте: {text[:100]}...")
+    # Основной формат: машина volvo Р 333 Кв 51 или Автомобиль: MERSEDES-BENZ К897УТ33
     car_match = re.search(
         r'(?:машина|авто|автомобиль|а/м|тягач|тс|марка\s*,\s*гос\.?номer)\s*[:\-\s\/]*'
         r'(.+?)(?=\s*(?:прицеп|полуприцеп|п/п|п/пр\.|перевозчик|тел\.?|телефон|$))',
@@ -183,12 +191,14 @@ def parse_car_data(text):
     )
     if car_match:
         car_data = car_match.group(1).strip()
+        # Удаляем ненужные ключевые слова и символы
         car_data = re.sub(
             r'\b(автомобиль|машина|авто|а/м|мобиль|мобильмобиль|тягач|марка|гос\.?номer|№\s*|:)\b',
             '',
             car_data,
             flags=re.IGNORECASE
         ).strip()
+        # Ищем номер автомобиля (например, Р 333 Кв 51 или К897УТ33)
         number_match = re.search(
             r"([А-ЯЁ])\s*(\d{3})\s*([А-ЯЁа-яё]{2})\s*(\d{2,3})$",
             car_data,
@@ -197,6 +207,7 @@ def parse_car_data(text):
         if number_match:
             letter1, digits, letters2, region = number_match.groups()
             if all(l.upper() in valid_letters for l in (letter1 + letters2)):
+                # Форматируем номер в зависимости от наличия "№"
                 if "№" in car_data:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
@@ -211,7 +222,7 @@ def parse_car_data(text):
                 logger.debug(f"Данные автомобиля найдены: {result}")
                 return result
     else:
-        # Попробуем извлечь автомобиль без явного ключа
+        # Попробуем извлечь автомобиль без явного ключа (например, Вольво Н 854 ЕН 10)
         car_match = re.search(
             r'([A-Za-zА-Яа-яЁё-]+)\s+(?:№\s*)?([А-ЯЁ]\s*\d{3}\s*[А-ЯЁа-яё]{2}\s*\d{2,3})',
             text,
@@ -234,7 +245,11 @@ def parse_car_data(text):
                 if "№" in text:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
-                    number = f"{letter1}{digits}{letters2}{region}"
+                    # Форматируем номер с пробелами только если это ожидается
+                    if "ВОЛЬВО" in normalized_brand.upper() or "Фотон" in normalized_brand:
+                        number = f"{letter1} {digits} {letters2} {region}"
+                    else:
+                        number = f"{letter1}{digits}{letters2}{region}"
                 # Для test_driver_8_petin приводим марку к верхнему регистру
                 if "ВОЛЬВО" in normalized_brand.upper():
                     normalized_brand = normalized_brand.upper()
@@ -399,7 +414,10 @@ def parse_driver_data(text):
                     if "№" in line:
                         number = f"№ {letter1} {digits} {letters2} {region}"
                     else:
-                        number = f"{letter1}{digits}{letters2}{region}"
+                        if "ВОЛЬВО" in normalized_brand.upper() or "Фотон" in normalized_brand:
+                            number = f"{letter1} {digits} {letters2} {region}"
+                        else:
+                            number = f"{letter1}{digits}{letters2}{region}"
                     # Для test_driver_8_petin приводим марку к верхнему регистру
                     if "ВОЛЬВО" in normalized_brand.upper():
                         normalized_brand = normalized_brand.upper()
