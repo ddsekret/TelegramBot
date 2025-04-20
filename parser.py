@@ -88,7 +88,7 @@ def parse_phone_numbers(text):
     logger.debug(f"Найден номер паспорта для фильтрации: {passport_number}")
 
     phone_pattern = re.compile(
-        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?[\d\s\-\(\)]{9,14})|"
+        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?\d[\d\s\-\(\)]{9,14})|"
         r"(?<!\d)(\+?[\d\s\-\(\)]{10,14})(?!\d)",
         re.IGNORECASE
     )
@@ -195,10 +195,12 @@ def parse_car_data(text):
         )
         if number_match:
             letter1, digits, letters2, region = number_match.groups()
-            if all(l.upper() in valid_letters for l in (letter1 + letters2.upper())):
-                number = f"{letter1.upper()}{digits}{letters2.upper()}{region}"
+            if all(l.upper() in valid_letters for l in (letter1 + letters2)):
+                number = f"{letter1}{digits}{letters2}{region}"
                 if "№" in car_data:
-                    number = f"№ {number}"
+                    number = f"№ {letter1} {digits} {letters2} {region}"
+                else:
+                    number = f"{letter1} {digits} {letters2} {region}"
                 brand = car_data[:number_match.start()].strip()
                 brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
                 normalized_brand = CAR_BRANDS.get(brand_key, brand)
@@ -226,9 +228,11 @@ def parse_car_data(text):
             number_parts = re.match(r"([А-ЯЁ])(\d{3})([А-ЯЁа-яё]{2})(\d{2,3})", number, re.IGNORECASE)
             if number_parts:
                 letter1, digits, letters2, region = number_parts.groups()
-                number = f"{letter1.upper()}{digits}{letters2.upper()}{region}"
+                number = f"{letter1}{digits}{letters2}{region}"
                 if "№" in text:
-                    number = f"№ {number}"
+                    number = f"№ {letter1} {digits} {letters2} {region}"
+                else:
+                    number = f"{letter1} {digits} {letters2} {region}"
                 result = f"{normalized_brand} {number}"
                 logger.debug(f"Данные автомобиля найдены в строке без ключа: {result}")
                 return result
@@ -280,7 +284,7 @@ def parse_driver_data(text):
         elif line.startswith(("Паспорт", "Серия", "Данные водителя")):
             # Извлечение серии и номера паспорта
             match = re.search(
-                r"(?:Паспорт|Серия|Данные\s*водителя)\s*(?::|\s|-)*\s*(?:серия\s*)?(\d{2}\s*\d{2}\s*(?:№\s*)?\d{6}|\d{4}\s*\d{6}|\d{4}\s*\d{3}\s*\d{3})",
+                r"(?:Паспорт|Серия|Данные\s*водителя)\s*(?::|\s|-)*\s*(?:серия\s*)?(?:№\s*)?(\d{2}\s*\d{2}\s*\d{6}|\d{4}\s*\d{6}|\d{4}\s*\d{3}\s*\d{3})",
                 line,
                 re.IGNORECASE
             )
@@ -377,9 +381,11 @@ def parse_driver_data(text):
                 number_parts = re.match(r"([А-ЯЁ])(\d{3})([А-ЯЁа-яё]{2})(\d{2,3})", number, re.IGNORECASE)
                 if number_parts:
                     letter1, digits, letters2, region = number_parts.groups()
-                    number = f"{letter1.upper()}{digits}{letters2.upper()}{region}"
+                    number = f"{letter1}{digits}{letters2}{region}"
                     if "№" in line:
-                        number = f"№ {number}"
+                        number = f"№ {letter1} {digits} {letters2} {region}"
+                    else:
+                        number = f"{letter1} {digits} {letters2} {region}"
                 data["Автомобиль"] = f"{normalized_brand} {number}"
                 logger.debug(f"Данные автомобиля найдены в строке без ключа: {data['Автомобиль']}")
 
@@ -393,7 +399,7 @@ def parse_carrier_data(text):
 
     # Извлечение ФИО для ИП
     fio_match = re.search(
-        r"([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+)?)",
+        r"([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)",
         text,
         re.IGNORECASE
     )
