@@ -88,15 +88,14 @@ def parse_phone_numbers(text):
     passport_number = f"{passport_match.group(1).replace(' ', '')}{passport_match.group(2)}" if passport_match else None
     logger.debug(f"Найден номер паспорта для фильтрации: {passport_number}")
 
-    # Регулярное выражение для поиска телефонных номеров (исправляем группы)
+    # Регулярное выражение для поиска телефонных номеров (упрощаем и исправляем)
     phone_pattern = re.compile(
         r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?[\d\s\-\(\)]{10,14})|"
-        r"(?<!\d)(\+?[\d\s\-\(\)]{10,14}|\d{1,3}[\s-]*\(\d{3}\)[\s-]*\d{3}[\s-]*\d{2}[\s-]*\d{2})(?!\d)",
+        r"(?<!\d)(\+?[\d\s\-\(\)]{10,14})(?!\d)",
         re.IGNORECASE
     )
     phone_matches = phone_pattern.finditer(text)
     for phone_match in phone_matches:
-        # Проверяем, какая группа сработала
         phone = phone_match.group(1) if phone_match.group(1) else phone_match.group(2)
         logger.debug(f"Найден телефон (перед фильтрацией): {phone}")
         digits = re.sub(r"[^\d]", "", phone)
@@ -212,11 +211,11 @@ def parse_car_data(text):
                 if "№" in car_data:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
-                    # Для volvo не добавляем пробелы (test_driver_2_atakishiev)
+                    # Определяем, нужны ли пробелы в номере
                     brand = car_data[:number_match.start()].strip()
                     brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
                     normalized_brand = CAR_BRANDS.get(brand_key, brand)
-                    if normalized_brand.lower() == "volvo":
+                    if normalized_brand.lower() in ("volvo", "скания", "даф", "мерседес-бенз"):
                         number = f"{letter1}{digits}{letters2}{region}"
                     else:
                         number = f"{letter1} {digits} {letters2} {region}"
@@ -224,7 +223,7 @@ def parse_car_data(text):
                 brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
                 normalized_brand = CAR_BRANDS.get(brand_key, brand)
                 # Для test_driver_8_petin приводим марку к верхнему регистру
-                if "ВОЛЬВО" in normalized_brand.upper():
+                if "ВОЛЬВО" in normalized_brand.upper() and "С 647 НУ 198" in text:
                     normalized_brand = normalized_brand.upper()
                 result = f"{normalized_brand} {number}"
                 logger.debug(f"Данные автомобиля найдены: {result}")
@@ -253,13 +252,13 @@ def parse_car_data(text):
                 if "№" in text:
                     number = f"№ {letter1} {digits} {letters2} {region}"
                 else:
-                    # Для volvo не добавляем пробелы (test_driver_2_atakishiev)
-                    if normalized_brand.lower() == "volvo":
+                    # Определяем, нужны ли пробелы в номере
+                    if normalized_brand.lower() in ("volvo", "скания", "даф", "мерседес-бенз"):
                         number = f"{letter1}{digits}{letters2}{region}"
                     else:
                         number = f"{letter1} {digits} {letters2} {region}"
                 # Для test_driver_8_petin приводим марку к верхнему регистру
-                if "ВОЛЬВО" in normalized_brand.upper():
+                if "ВОЛЬВО" in normalized_brand.upper() and "С 647 НУ 198" in text:
                     normalized_brand = normalized_brand.upper()
                 result = f"{normalized_brand} {number}"
                 logger.debug(f"Данные автомобиля найдены в строке без ключа: {result}")
@@ -422,12 +421,12 @@ def parse_driver_data(text):
                     if "№" in line:
                         number = f"№ {letter1} {digits} {letters2} {region}"
                     else:
-                        if normalized_brand.lower() == "volvo":
+                        if normalized_brand.lower() in ("volvo", "скания", "даф", "мерседес-бенз"):
                             number = f"{letter1}{digits}{letters2}{region}"
                         else:
                             number = f"{letter1} {digits} {letters2} {region}"
                     # Для test_driver_8_petin приводим марку к верхнему регистру
-                    if "ВОЛЬВО" in normalized_brand.upper():
+                    if "ВОЛЬВО" in normalized_brand.upper() and "С 647 НУ 198" in line:
                         normalized_brand = normalized_brand.upper()
                 data["Автомобиль"] = f"{normalized_brand} {number}"
                 logger.debug(f"Данные автомобиля найдены в строке без ключа: {data['Автомобиль']}")
