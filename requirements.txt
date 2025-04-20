@@ -6,3 +6,5 @@ yadisk
 speechrecognition
 natasha
 word2number
+pytest
+flake8
