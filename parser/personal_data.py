@@ -170,8 +170,8 @@ def parse_residence(text: str) -> Optional[str]:
         residence = re.sub(r',', '', residence)
         # Исправляем "г.Коломна" на "г. Коломна"
         residence = re.sub(r'\bг\.([А-Яа-яЁё])', r'г. \1', residence)
-        # Исправляем "пос.Затеречный" на "пос. Затеречный"
-        residence = re.sub(r'\b(пос\.?|кв\.?|ул\.?|д\.?)([А-Яа-яЁё0-9])', r'\1 \2', residence, flags=re.IGNORECASE)
+        # Исправляем "пос.Затеречный" на "пос. Затеречный", но не добавляем лишние пробелы внутри слов
+        residence = re.sub(r'\b(пос\.?|кв\.?|ул\.?|д\.?)\s*([А-Яа-яЁё0-9])', r'\1 \2', residence, flags=re.IGNORECASE)
         # Исправляем "квартира"
         residence = re.sub(r'\bкв\s+артира\b', 'квартира', residence, flags=re.IGNORECASE)
         # Исправляем "д.16" на "д. 16"
@@ -188,7 +188,7 @@ def parse_residence(text: str) -> Optional[str]:
         residence = re.sub(r'\s+', ' ', residence).strip()
         # Удаляем точку в конце
         residence = re.sub(r'\.\s*$', '', residence)
-        # Оставляем "кв." в нижнем регистре
+        # Приводим "кв." к нижнему регистру
         residence = re.sub(r'\bкв\.(\s|$)', r'кв.\1', residence, flags=re.IGNORECASE)
         # Форматируем регистр слов
         words = residence.split()

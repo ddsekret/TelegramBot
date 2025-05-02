@@ -9,31 +9,28 @@ def normalize_passport_data(data: Dict[str, Optional[str]]) -> Dict[str, Optiona
         if code in SUBDIVISIONS:
             subdivision_info = SUBDIVISIONS[code]
             subdivision = subdivision_info["subdivision"]
-            data["Паспорт_место_выдачи"] = subdivision  # Не добавляем регион в скобках
+            region = subdivision_info.get("region", "")
+            # Добавляем регион в скобках, если он отсутствует
+            if region and not subdivision.endswith(f"({region})"):
+                subdivision = f"{subdivision} ({region})"
+            data["Паспорт_место_выдачи"] = subdivision
             logger.debug(f"Нормализованное место выдачи: {data['Паспорт_место_выдачи']}")
         else:
             logger.warning(f"Код подразделения {code} не найден в SUBDIVISIONS, оставляем оригинальное место выдачи")
-            # Сохраняем оригинальное место выдачи, но нормализуем регистр
+            # Сохраняем оригинальное место выдачи и регистр
             if "Паспорт_место_выдачи" in data and data["Паспорт_место_выдачи"]:
-                place = data["Паспорт_место_выдачи"]
-                words = place.split()
-                formatted_place = []
-                for word in words:
-                    if word.lower() in SMALL_WORDS:
-                        # Приводим предлоги к нижнему регистру, но сохраняем регистр для остальных слов
-                        if word.lower() in ["по", "в", "на", "и"]:
-                            formatted_place.append(word.lower())
-                        else:
-                            formatted_place.append(word)
-                    else:
-                        formatted_place.append(word)
-                data["Паспорт_место_выдачи"] = ' '.join(formatted_place)
+                data["Паспорт_место_выдачи"] = data["Паспорт_место_выдачи"]
     return data
 
 def normalize_vehicle_data(data: Dict[str, Optional[str]], key: str) -> Dict[str, Optional[str]]:
     """Нормализует данные автомобиля или прицепа."""
     if key in data and data[key]:
         vehicle = data[key].strip()
+        # Приводим бренд к верхнему регистру
+        parts = vehicle.split(maxsplit=1)
+        if len(parts) > 1:
+            brand, number = parts
+            vehicle = f"{brand.upper()} {number}"
         data[key] = vehicle
     return data
 
