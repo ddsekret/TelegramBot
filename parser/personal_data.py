@@ -188,18 +188,19 @@ def parse_residence(text: str) -> Optional[str]:
         residence = re.sub(r'\s+', ' ', residence).strip()
         # Удаляем точку в конце
         residence = re.sub(r'\.\s*$', '', residence)
-        # Приводим "кв." к ожидаемому регистру (кВ.)
-        residence = re.sub(r'\bкв\.(\s|$)', r'кВ.\1', residence, flags=re.IGNORECASE)
+        # Оставляем "кв." в нижнем регистре
+        residence = re.sub(r'\bкв\.(\s|$)', r'кв.\1', residence, flags=re.IGNORECASE)
         # Форматируем регистр слов
         words = residence.split()
         formatted_address = []
-        for word in words:
-            if word.lower() in SMALL_WORDS and not word.startswith('кВ'):
+        for i, word in enumerate(words):
+            if word.lower() in SMALL_WORDS and not word.startswith('кв'):
                 formatted_address.append(word.lower())
             elif word in ['ул.', 'д.', 'пос.']:
                 formatted_address.append(word.lower())
+            elif word.lower() == 'м.' and i > 0 and words[i-1].lower() == 'ул.':
+                formatted_address.append('М.')
             else:
-                # Сохраняем исходный регистр для названий улиц и других слов
                 formatted_address.append(word)
         residence = ' '.join(formatted_address)
         # Исправляем "Дом." на "дом."

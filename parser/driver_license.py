@@ -24,10 +24,6 @@ def parse_driver_license(text: str) -> Optional[str]:
     )
     if vu_match:
         vu_number = vu_match.group(1).strip()
-        # Удаляем пробелы для формата без пробелов (например, 1024744024)
-        if vu_number.replace(" ", "").isdigit() and len(vu_number.replace(" ", "")) == 10:
-            return vu_number.replace(" ", "")
-        # Сохраняем пробелы для формата с пробелами (например, 99 31 849596)
         logger.debug(f"Найден ВУ: {vu_number}")
         return vu_number
 

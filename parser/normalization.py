@@ -8,9 +8,8 @@ def normalize_passport_data(data: Dict[str, Optional[str]]) -> Dict[str, Optiona
         code = data["Паспорт_код_подразделения"]
         if code in SUBDIVISIONS:
             subdivision_info = SUBDIVISIONS[code]
-            region = subdivision_info["region"]
             subdivision = subdivision_info["subdivision"]
-            data["Паспорт_место_выдачи"] = f"{subdivision} ({region})"
+            data["Паспорт_место_выдачи"] = subdivision  # Не добавляем регион в скобках
             logger.debug(f"Нормализованное место выдачи: {data['Паспорт_место_выдачи']}")
         else:
             logger.warning(f"Код подразделения {code} не найден в SUBDIVISIONS, оставляем оригинальное место выдачи")
@@ -21,7 +20,11 @@ def normalize_passport_data(data: Dict[str, Optional[str]]) -> Dict[str, Optiona
                 formatted_place = []
                 for word in words:
                     if word.lower() in SMALL_WORDS:
-                        formatted_place.append(word.lower())
+                        # Приводим предлоги к нижнему регистру, но сохраняем регистр для остальных слов
+                        if word.lower() in ["по", "в", "на", "и"]:
+                            formatted_place.append(word.lower())
+                        else:
+                            formatted_place.append(word)
                     else:
                         formatted_place.append(word)
                 data["Паспорт_место_выдачи"] = ' '.join(formatted_place)
