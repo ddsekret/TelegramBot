@@ -47,8 +47,9 @@ jobs:
         echo "PYTHONPATH after setting: $env:PYTHONPATH"
       shell: powershell
 
-    - name: Run tests with coverage
+    - name: Add current directory to sys.path and run tests
       run: |
+        python -c "import sys; sys.path.append('$env:GITHUB_WORKSPACE'); print(sys.path)"
         pytest --cache-clear test_parsing.py -n 2 --cov=parser --cov-report=xml
       shell: powershell
       working-directory: ${{ github.workspace }}
