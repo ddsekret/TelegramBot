@@ -10,51 +10,51 @@ on:
 
 jobs:
   test:
-    runs-on: windows-latest  # Используем Windows, так как проект тестировался на этой ОС
+    runs-on: windows-latest
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4  # Клонирование репозитория
+      uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.12'  # Устанавливаем версию Python
+        python-version: '3.12'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest pytest-xdist pytest-cov flake8 black  # Устанавливаем зависимости
+        pip install pytest pytest-xdist pytest-cov flake8 black
       shell: powershell
 
     - name: Set PYTHONPATH
       run: |
-        echo "PYTHONPATH=$PYTHONPATH;C:\Users\runneradmin\TelegramBot" >> $GITHUB_ENV
-      shell: powershell  # Устанавливаем PYTHONPATH для Windows
+        echo "PYTHONPATH=$PYTHONPATH;$env:GITHUB_WORKSPACE" >> $GITHUB_ENV
+      shell: powershell
 
     - name: Lint with flake8
       run: |
-        flake8 . --max-line-length=120  # Проверка стиля кода
+        flake8 . --max-line-length=120
       shell: powershell
 
     - name: Format with black
       run: |
-        black . --check  # Проверка форматирования кода
+        black . --check
       shell: powershell
 
     - name: Run tests with coverage
       run: |
-        pytest --cache-clear test_parsing.py -n auto --cov=parser --cov-report=xml  # Запуск тестов с покрытием
+        pytest --cache-clear test_parsing.py -n auto --cov=parser --cov-report=xml
       shell: powershell
 
     - name: Upload test logs
-      if: failure()  # Если тесты не проходят, загружаем логи для анализа
+      if: failure()
       uses: actions/upload-artifact@v4
       with:
         name: test-logs
-        path: parser.log  # Путь к логам
+        path: parser.log
 
     - name: Upload coverage report
       uses: codecov/codecov-action@v3
       with:
-        files: ./coverage.xml  # Загружаем отчёт о покрытии
+        files: ./coverage.xml
