@@ -35,15 +35,23 @@ jobs:
         pip install pytest pytest-xdist pytest-cov
       shell: powershell
 
+    - name: Check working directory
+      run: |
+        echo "Current working directory: $PWD"
+        dir
+      shell: powershell
+
     - name: Set PYTHONPATH
       run: |
-        echo "PYTHONPATH=$PYTHONPATH;$env:GITHUB_WORKSPACE" >> $GITHUB_ENV
+        echo "PYTHONPATH=$env:PYTHONPATH;$env:GITHUB_WORKSPACE" >> $GITHUB_ENV
+        echo "PYTHONPATH after setting: $env:PYTHONPATH"
       shell: powershell
 
     - name: Run tests with coverage
       run: |
         pytest --cache-clear test_parsing.py -n 2 --cov=parser --cov-report=xml
       shell: powershell
+      working-directory: ${{ github.workspace }}
 
     - name: Upload test logs
       if: failure()
