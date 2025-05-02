@@ -14,7 +14,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3  # Клонирование репозитория
+      uses: actions/checkout@v4  # Клонирование репозитория
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -49,7 +49,7 @@ jobs:
 
     - name: Upload test logs
       if: failure()  # Если тесты не проходят, загружаем логи для анализа
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-logs
         path: parser.log  # Путь к логам
