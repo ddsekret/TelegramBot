@@ -1,2 +1,2 @@
-# telegram-bot-1
-Telegram Bot for parsing driver data
+# TelegramBot
+Тегерам-бот для обработки данных водителей
