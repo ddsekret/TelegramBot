@@ -1,75 +1,106 @@
 def parse_carrier_data(text):
-    """Парсит данные перевозчика из текста."""
+    """Парсит данные перевозчика из текста, универсально обрабатывая разные форматы."""
     data = {}
-    text = text.strip().replace('\n', ' ')
-    
-    # Извлечение перевозчика (только ФИО, если есть Имя)
-    carrier_match = re.search(
-        r"(ООО|ИП|ОАО|ЗАО)\s+([^\s].+?)(?=\s*(?:Имя|Телефон|ИНN|$))",
-        text,
-        re.IGNORECASE
-    )
-    if carrier_match:
-        org_type, carrier_name = carrier_match.groups()
-        # Проверяем, есть ли ФИО после слова "Имя"
-        name_match = re.search(
-            r"Имя\s*:\s*([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)",
-            text,
-            re.IGNORECASE
-        )
-        if name_match:
-            # Если есть ФИО, используем его как имя перевозчика
-            data["Перевозчик"] = f"{org_type} {name_match.group(1).strip()}"
-        else:
-            # Убираем лишние пробелы и возможные номера телефонов или ИНН из названия
-            carrier_name = re.sub(
-                r"(?:\+?\d\s*\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2}|\d\s*\d{3}\s*\d{3}\d{2}\d{2}|\d{10,12})",
-                "",
-                carrier_name
-            ).strip()
-            data["Перевозчик"] = f"{org_type} {carrier_name}"
-    else:
-        # Пробуем извлечь перевозчика без явного формата (например, ООО +7 (987) 654-32-10)
-        carrier_match = re.search(
-            r"(ООО|ИП|ОАО|ЗАО)\s*(\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2})",
-            text,
-            re.IGNORECASE
-        )
-        if carrier_match:
-            org_type, phone = carrier_match.groups()
-            data["Перевозчик"] = f"{org_type} {phone}"
-    
-    # Извлечение имени перевозчика
-    if "Имя перевозчика" not in data:
-        name_match = re.search(
-            r"Имя\s*:\s*([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)",
-            text,
-            re.IGNORECASE
-        )
-        if name_match:
-            data["Имя перевозчика"] = name_match.group(1).strip()
+    text = text.strip()
+    logger.debug(f"Входной текст: {text[:100]}...")
 
-    # Извлечение телефона (даже если нет слова "Телефон")
-    phone_match = re.search(
-        r"(?:Телефон\s*:\s*|Телефон\s+)?(\+?\d\s*\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2}|\d\s*\d{3}\s*\d{3}\d{2}\d{2}|\d{10,11})",
-        text,
-        re.IGNORECASE
-    )
-    if phone_match:
-        data["Телефон"] = parse_phone_numbers(phone_match.group(1).strip())
-    else:
-        # Если телефон не найден в явном формате, ищем его в строке перевозчика
-        phone_match = re.search(
-            r"(ООО|ИП|ОАО|ЗАО)\s*(\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2})",
-            text,
-            re.IGNORECASE
-        )
-        if phone_match:
-            data["Телефон"] = parse_phone_numbers(phone_match.group(2).strip())
+    # Извлечение телефона
+    phone = parse_phone_numbers(text)
+    if phone:
+        data["Контакт"] = phone
 
     # Извлечение ИНН
-    inn_match = re.search(r"ИНN\s*(\d+)", text, re.IGNORECASE)
+    inn_match = re.search(r"ИНН\s*[:\-\s]*(\d{10,12})", text, re.IGNORECASE)
     if inn_match:
-        data["ИНN"] = inn_match.group(1).strip()
+        data["ИНН"] = inn_match.group(1).strip()
 
+    # Извлечение типа организации
+    org_type_match = re.search(r"\b(ООО|ИП|ОАО|ЗАО)\b", text, re.IGNORECASE)
+    org_type = org_type_match.group(1).upper() if org_type_match else None
+
+    # Извлечение ФИО (для ИП, включая инициалы и одно слово)
+    fio_pattern = (
+        r"(?:Имя\s*[:\-\s]+|Перевозчик\s*[:\-\s]+ИП\s+|ИП\s+|^|\s)([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+)*|[А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.?))(?:\s*(?:Телефон|ИНН|[\+8]\d{10,11}|$))"
+    )
+    fio_match = re.search(fio_pattern, text, re.IGNORECASE)
+
+    # Дополнительная проверка: ищем ФИО в конце строки, если fio_pattern не сработал
+    if not fio_match or (fio_match and fio_match.group(1).lower() == "ип"):
+        fio_fallback_pattern = r"(?:ИНН\s*\d{10,12}\s+)?([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+)*|[А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.?))\s*(?=$|\n)"
+        fio_match = re.search(fio_fallback_pattern, text, re.IGNORECASE)
+
+    # Извлечение названия перевозчика
+    carrier_pattern = (
+        r"(?:Перевозчик\s*[:\-\s]+)?(?:ООО|ИП|ОАО|ЗАО)\s*([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+)*|[А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.?)?|[^\d\s].*?)(?=\s*(?:Имя|ИНН|Телефон|[\+8]\d{10,11}|$))"
+    )
+    carrier_match = re.search(carrier_pattern, text, re.IGNORECASE)
+
+    # Обработка ФИО
+    if fio_match:
+        full_name = ' '.join(word.capitalize() for word in fio_match.group(1).split())
+        # Проверяем, чтобы full_name не было просто "Ип"
+        if full_name.lower() == "ип":
+            full_name = None
+        else:
+            name_parts = full_name.split()
+            short_name = name_parts[0] if name_parts else "Не указано"
+            data["Имя"] = ' '.join(name_parts[1:]) if len(name_parts) > 1 else name_parts[0] if name_parts else "Не указано"
+            data["Короткое название"] = short_name
+
+    if not fio_match or full_name is None:
+        data["Имя"] = "Не указано"
+        data["Короткое название"] = "Не указано"
+
+    # Обработка названия перевозчика
+    if carrier_match:
+        name = carrier_match.group(1).strip()
+        # Удаляем ключевые слова и лишние символы
+        name = re.sub(r"^(Перевозчик|Имя)\s*[:\-\s]*", "", name, flags=re.IGNORECASE).strip()
+        name = re.sub(
+            r"(?:\+?\d\s*\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2}|\d{10,12})",
+            "",
+            name
+        ).strip()
+
+        # Проверяем, начинается ли название с типа организации
+        org_type_in_name = re.match(r"^(ООО|ИП|ОАО|ЗАО)", name, re.IGNORECASE)
+        if org_type_in_name:
+            org_type = org_type_in_name.group(1).upper()
+            name = name[len(org_type):].strip()
+
+        if org_type == "ИП":
+            if full_name:
+                data["Перевозчик"] = f"ИП {full_name}"
+                if phone and data["Имя"] != "Не указано":
+                    data["Контакт"] = f"{data['Имя']} {phone}"
+            else:
+                data["Перевозчик"] = "ИП"
+        else:
+            # Для ООО, ОАО, ЗАО
+            quoted_name_match = re.search(r'[\'\"«](.+?)[\'\"»]', name)
+            if quoted_name_match:
+                name = quoted_name_match.group(1).strip()
+            if name and name.lower() not in ("телефон", "перевозчик", "имя"):
+                formatted_name = ' '.join(word.capitalize() for word in name.split())
+                data["Перевозчик"] = f"{org_type} {formatted_name}" if org_type else formatted_name
+                data["Короткое название"] = formatted_name
+            else:
+                data["Перевозчик"] = org_type if org_type else "Не указано"
+                data["Короткое название"] = "Не указано"
+    else:
+        # Если carrier_match не нашёл ничего
+        if org_type == "ИП" and full_name:
+            data["Перевозчик"] = f"ИП {full_name}"
+            if phone and data["Имя"] != "Не указано":
+                data["Контакт"] = f"{data['Имя']} {phone}"
+        else:
+            # Для test_only_phone не добавляем поле "Перевозчик", если данных нет
+            if phone and not fio_match and not org_type:
+                pass  # Не добавляем "Перевозчик"
+            else:
+                data["Перевозчик"] = org_type if org_type else "Не указано"
+
+    logger.debug(f"fio_match: {fio_match.group(1) if fio_match else None}")
+    logger.debug(f"carrier_match: {carrier_match.groups() if carrier_match else None}")
+    logger.debug(f"Результат парсинга: {data}")
     return data

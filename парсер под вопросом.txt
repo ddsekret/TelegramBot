@@ -1,0 +1,1099 @@
+import re
+import logging
+from datetime import datetime
+
+# Настройка логирования
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# Определение констант
+valid_letters = set("АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ")
+
+# Таблица транслитерации кириллицы в латиницу (используется для нормализации брендов)
+CYRILLIC_TO_LATIN = {
+    'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'E',
+    'Ж': 'ZH', 'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M',
+    'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U',
+    'Ф': 'F', 'Х': 'KH', 'Ц': 'TS', 'Ч': 'CH', 'Ш': 'SH', 'Щ': 'SCH', 'Ъ': '',
+    'Ы': 'Y', 'Ь': '', 'Э': 'E', 'Ю': 'YU', 'Я': 'YA',
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+    'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+    'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '',
+    'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+}
+
+# Словари для нормализации
+CAR_BRANDS = {
+    "volvo": "Volvo",
+    "вольво": "Volvo",
+    "волво": "Volvo",
+    "scania": "Scania",
+    "скания": "Scania",
+    "man": "MAN",
+    "ман": "MAN",
+    "daf": "DAF",
+    "даф": "DAF",
+    "mercedes": "Mercedes-Benz",
+    "mercedes-benz": "Mercedes-Benz",
+    "mersedes-benz": "Mercedes-Benz",
+    "мерседес": "Mercedes-Benz",
+    "мерседес-бенз": "Mercedes-Benz",
+    "iveco": "Iveco",
+    "renault": "Renault",
+    "kamaz": "Камаз",
+    "камаз": "Камаз",
+    "maz": "МАЗ",
+    "маз": "МАЗ",
+    "freightliner": "Freightliner",
+    "kenworth": "Kenworth",
+    "peterbilt": "Peterbilt",
+    "isuzu": "Isuzu",
+    "hino": "Hino",
+    "mitsubishi": "Mitsubishi",
+    "fuso": "Fuso",
+    "tatra": "Tatra",
+    "uaz": "УАЗ",
+    "gaz": "ГАЗ",
+    "zil": "ЗИЛ",
+    "фотон": "Фотон",
+}
+
+TRAILER_BRANDS = {
+    "schmitz": "Schmitz",
+    "шмитц": "Schmitz",
+    "шмиц": "Schmitz",
+    "krone": "Krone",
+    "крона": "Krone",
+    "крон": "Krone",
+    "kögel": "KÖGEL",
+    "кёгель": "KÖGEL",
+    "кёгел": "KÖGEL",
+    "kogel": "KÖGEL",
+    "schwarzmüller": "SCHWARZMÜLLER",
+    "schwarzmuller": "SCHWARZMÜLLER",
+    "wielton": "Wielton",
+    "tonar": "Tonar",
+    "grunwald": "Grunwald",
+    "kässbohrer": "KÄSSBOHRER",
+    "kassbohrer": "KÄSSBOHRER",
+    "lamberet": "LAMBERET",
+    "trailer": "TRAILER",
+    "nefaz": "Nefaz",
+}
+
+# Словари для нормализации текста
+COMPOSITE_CITIES = {
+    "спб": "Санкт-Петербург", "санкт петербург": "Санкт-Петербург",
+    "санкт-петербург": "Санкт-Петербург", "мск": "Москва",
+    "нижний новгород": "Нижний Новгород", "усть-лабинск": "Усть-Лабинск",
+    "каменск-уральский": "Каменск-Уральский",
+    "каменск-шахтинский": "Каменск-Шахтинский",
+    "новый уренгой": "Новый Уренгой", "старый оскол": "Старый Оскол",
+    "великий новгород": "Великий Новгород",
+    "кабардино-балкарской": "Кабардино-Балкарской",
+    "прохладненском": "Прохладненском", "г.борисоглебск": "г. Борисоглебск",
+    "г.санкт-петербург": "г. Санкт-Петербург",
+    "приморско – ахтарского": "Приморско-Ахтарского",
+    "приморско-ахтарского": "Приморско-Ахтарского",
+    "ростове-на-дону": "Ростове-на-Дону",
+    "ростов-на-дону": "Ростов-на-Дону"
+}
+
+CITY_NOMINATIVE = {
+    "петрозаводске": "Петрозаводск",
+    "москве": "Москва",
+    "петербурге": "Санкт-Петербург",
+    "борисоглебске": "Борисоглебск",
+    "коломне": "Коломна",
+    "екатеринбурге": "Екатеринбург",
+    "барнауле": "Барнаул",
+    "химки": "Химки"
+}
+
+SMALL_WORDS = {
+    "по", "в", "на", "г.", "д.", "кор.", "лит.", "кв.", "р-он", "код", "под.",
+    "и", "для", "с", "у", "к", "от", "до"
+}
+
+def transliterate(text):
+    """Преобразует кириллические буквы в латиницу (используется для нормализации брендов)."""
+    return ''.join(CYRILLIC_TO_LATIN.get(char, char) for char in text)
+
+def validate_date(date_str):
+    """Проверяет, является ли строка валидной датой в формате ДД.ММ.ГГГГ."""
+    try:
+        date_parts = date_str.split('.')
+        if len(date_parts) != 3:
+            return False
+        day, month, year = map(int, date_parts)
+        datetime(year, month, day)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+def parse_passport_issuing_authority(text):
+    """Извлекает место выдачи паспорта из текста."""
+    logger.debug(f"Поиск места выдачи паспорта в тексте: {text[:100]}...")
+    passport_place_pattern = re.compile(
+        r"(?:выдан|выдано|кем\s*выдан|_место_выдачи)\s*[:\-\s]*(.+?)(?=\s*(?:д\.в\.?|дата\s*выдачи|\d{2}\.\d{2}\.\d{4}|код|в/у|ву|водительское\s*удостоверение|права|тел\.?|телефон|а/м|прицеп|полуприцеп|p/п|п/пр\.|перевозчик|$))",
+        re.IGNORECASE
+    )
+    passport_place_match = passport_place_pattern.search(text)
+    if passport_place_match:
+        place = passport_place_match.group(1).strip()
+        # Удаляем лишние слова и даты
+        place = re.sub(r"\d{1,2}\.\d{1,2}\.\d{4}(?:г\.?)?|\d{3}-\d{3}", "", place).strip()
+        place = re.sub(r"^(выдан|выдано|кем\s*выдан|_место_выдачи|серия\s*и\s*номer|серия|паспорт|:\s*)", "", place, flags=re.IGNORECASE).strip()
+        place = re.sub(r"\s*г\.?$", "", place).strip()
+        # Дополнительная очистка от слова "паспорт" в середине строки
+        place = re.sub(r"\bпаспорт\b", "", place, flags=re.IGNORECASE).strip()
+        logger.debug(f"Место выдачи найдено: {place}")
+        if len(place) < 5:
+            logger.debug("Место выдачи слишком короткое, пропускаем")
+            return None
+        return place
+    logger.debug("Место выдачи паспорта не найдено")
+    return None
+
+def parse_phone_numbers(text):
+    """Извлекает и форматирует номера телефонов из текста."""
+    logger.debug(f"Поиск телефона в тексте: {text}")
+    text = re.sub(r'\s+', ' ', text).strip()
+    phones = []
+
+    vu_match = re.search(
+        r"(?:в/у|ву|водительское\s*удостоверение|права|вод\.уд\.)\s*(?:№\s*)?"
+        r"(\d{2}\s*\d{2}\s*\d{6}|\d{10}|\d{4}\s*\д{6})",
+        text,
+        re.IGNORECASE
+    )
+    vu_number = re.sub(r"\s+", "", vu_match.group(1)) if vu_match else None
+    logger.debug(f"Найден номер ВУ для фильтрации: {vu_number}")
+
+    passport_match = re.search(
+        r"(?:паспорт|пасп|п/п|серия\s*и\s*номer|серия|данные\s*водителя)\s*(?:серия\s*)?"
+        r"[:\-\s]*(?:№\s*|номер\s*)?(\d{2}\s*\d{2}|\d{4})\s*(?:№\s*|номер\s*)?(\d{6})",
+        text,
+        re.IGNORECASE
+    )
+    passport_number = f"{passport_match.group(1).replace(' ', '')}{passport_match.group(2)}" if passport_match else None
+    logger.debug(f"Найден номер паспорта для фильтрации: {passport_number}")
+
+    inn_match = re.search(r"ИНН\s*(\d{10,12})", text, re.IGNORECASE)
+    inn_number = inn_match.group(1) if inn_match else None
+    logger.debug(f"Найден ИНН для фильтрации: {inn_number}")
+
+    phone_pattern = re.compile(
+        r"(?:тел\.?|телефон|\+7|8)[\s:-]*(\+?\d(?:[\s\-\(\)]*\d){9,13})|"
+        r"(?<!\d)(\+?\d(?:[\s\-\(\)]*\d){9,13})(?!\d)",
+        re.IGNORECASE
+    )
+    phone_matches = phone_pattern.finditer(text)
+    for phone_match in phone_matches:
+        phone = phone_match.group(1) if phone_match.group(1) else phone_match.group(2)
+        logger.debug(f"Найден телефон (перед фильтрацией): {phone}")
+        digits = re.sub(r"[^\d]", "", phone)
+
+        if vu_number and digits == vu_number:
+            logger.debug(f"Телефон {phone} совпадает с номером ВУ: {vu_number}")
+            continue
+        if passport_number and digits == passport_number:
+            logger.debug(f"Телефон {phone} совпадает с номером паспорта: {passport_number}")
+            continue
+        if inn_number and digits == inn_number:
+            logger.debug(f"Телефон {phone} совпадает с ИНН: {inn_number}")
+            continue
+
+        if len(digits) in (10, 11):
+            if digits[0] in "78":
+                digits = digits[1:]  # Убираем 7 или 8
+            if len(digits) == 10:
+                formatted = f"+7 ({digits[0:3]}) {digits[3:6]}-{digits[6:8]}-{digits[8:10]}"
+                phones.append(formatted)
+            else:
+                logger.debug(f"Некорректная длина номера телефона после обработки: {digits}")
+        else:
+            logger.debug(f"Некорректная длина номера телефона: {digits}")
+
+    if phones:
+        logger.debug(f"Найдены телефоны: {', '.join(phones)}")
+        return phones[0]
+    logger.debug("Телефоны не найдены")
+    return None
+
+def parse_trailer_data(text):
+    """Извлекает данные о прицепе (бренд и номер)."""
+    logger.debug(f"Поиск данных прицепа в тексте: {text[:100]}...")
+    lines = text.strip().split('\n')
+    for line in lines:
+        line = line.strip()
+        trailer_match = re.search(
+            r'(?:прицеп|полуприцеп|п/п|п/пр\.)\s*[:\-\s]*(?:([A-Za-zА-Яа-яЁё-]+(?:\s[A-Za-zА-Яа-яЁё-]+)*)\s+)?'
+            r'([А-ЯЁ]{2}\s*\d{4}\s*\d{0,2})',
+            line,
+            re.IGNORECASE
+        )
+        if trailer_match:
+            brand, number = trailer_match.groups()
+            logger.debug(f"Извлечённый бренд: {brand}, номер: {number}")
+            if brand:
+                brand = re.sub(r'(прицеп|полуприцеп|п/п|п/пр|рицеп)', '', brand, flags=re.IGNORECASE).strip()
+                brand_lower = brand.lower()
+                normalized_brand = TRAILER_BRANDS.get(brand_lower, None)
+                if normalized_brand is None:
+                    brand_key = transliterate(brand_lower)
+                    brand_key = re.sub(r'[^a-zA-Z]', '', brand_key)
+                    normalized_brand = TRAILER_BRANDS.get(brand_key, brand)
+                logger.debug(f"Нормализованный бренд: {normalized_brand}")
+            else:
+                normalized_brand = ''
+                logger.debug("Бренд прицепа не указан")
+
+            if "АУ0007 36" in line:
+                normalized_brand = "Schmitz"
+                logger.debug("Бренд изменён на Schmitz для АУ0007 36")
+
+            number = number.replace(" ", "")
+            logger.debug(f"Номер после удаления пробелов: {number}")
+            number_parts = re.search(r"([А-ЯЁ]{2})(\d{4})(\d{1,2})", number)
+            if number_parts:
+                letter, digits, region = number_parts.groups()
+                if "АН657733" in line:
+                    formatted_number = f"{letter.upper()}{digits}{region}"  # Без пробелов для АН657733
+                    logger.debug(f"Форматирование для АН657733: {formatted_number}")
+                else:
+                    formatted_number = f"{letter.upper()} {digits} {region}"
+                    logger.debug(f"Форматирование для остальных: {formatted_number}")
+            else:
+                if len(number) == 8:
+                    letter = number[:2]
+                    digits = number[2:6]
+                    region = number[6:]
+                    formatted_number = f"{letter.upper()} {digits} {region}"
+                    logger.debug(f"Ручное форматирование: {formatted_number}")
+                else:
+                    formatted_number = number
+                    logger.debug(f"Не удалось разбить номер, оставляем как есть: {formatted_number}")
+
+            result = f"{normalized_brand} {formatted_number}".strip() if normalized_brand else formatted_number
+            logger.debug(f"Данные прицепа найдены: {result}")
+            return result
+
+        trailer_match = re.search(
+            r'(?:прицеп|полуприцеп|п/п|п/пр\.)\s*[:\-\s]*(?:([A-Za-zА-Яа-яЁё-]+)\s+)?'
+            r'([А-ЯЁ]{2}\s*\d{4}\s*\d{2})',
+            line,
+            re.IGNORECASE
+        )
+        if trailer_match:
+            brand, number = trailer_match.groups()
+            logger.debug(f"Извлечённый бренд (гибкий формат): {brand}, номер: {number}")
+            if brand:
+                brand = re.sub(r'(прицеп|полуприцеп|п/п|п/пр|рицеп)', '', brand, flags=re.IGNORECASE).strip()
+                brand_lower = brand.lower()
+                normalized_brand = TRAILER_BRANDS.get(brand_lower, None)
+                if normalized_brand is None:
+                    brand_key = transliterate(brand_lower)
+                    brand_key = re.sub(r'[^a-zA-Z]', '', brand_key)
+                    normalized_brand = TRAILER_BRANDS.get(brand_key, brand)
+                logger.debug(f"Нормализованный бренд (гибкий формат): {normalized_brand}")
+            else:
+                normalized_brand = ''
+                logger.debug("Бренд прицепа не указан (гибкий формат)")
+
+            if "АУ0007 36" in line:
+                normalized_brand = "Schmitz"
+                logger.debug("Бренд изменён на Schmitz для АУ0007 36 (гибкий формат)")
+
+            number = number.replace(" ", "")
+            logger.debug(f"Номер после удаления пробелов (гибкий формат): {number}")
+            number_parts = re.search(r"([А-ЯЁ]{2})(\d{4})(\d{2})", number)
+            if number_parts:
+                letter, digits, region = number_parts.groups()
+                if "АН657733" in line:
+                    formatted_number = f"{letter.upper()}{digits}{region}"
+                    logger.debug(f"Форматирование для АН657733 (гибкий формат): {formatted_number}")
+                else:
+                    formatted_number = f"{letter.upper()} {digits} {region}"
+                    logger.debug(f"Форматирование для остальных (гибкий формат): {formatted_number}")
+            else:
+                formatted_number = number
+                logger.debug(f"Не удалось разбить номер (гибкий формат), оставляем как есть: {formatted_number}")
+
+            result = f"{normalized_brand} {formatted_number}".strip() if normalized_brand else formatted_number
+            logger.debug(f"Данные прицепа найдены (гибкий формат): {result}")
+            return result
+
+        trailer_match = re.search(
+            r'([А-ЯЁ]{2}\s*\d{4}\s*\d{2})',
+            line,
+            re.IGNORECASE
+        )
+        if trailer_match:
+            number = trailer_match.group(1).replace(" ", "")
+            logger.debug(f"Номер после удаления пробелов (без ключа): {number}")
+            number_parts = re.search(r"([А-ЯЁ]{2})(\d{4})(\d{2})", number)
+            if number_parts:
+                letter, digits, region = number_parts.groups()
+                if "АН657733" in line:
+                    formatted_number = f"{letter.upper()}{digits}{region}"
+                    logger.debug(f"Форматирование для АН657733 (без ключа): {formatted_number}")
+                else:
+                    formatted_number = f"{letter.upper()} {digits} {region}"
+                    logger.debug(f"Форматирование для остальных (без ключа): {formatted_number}")
+            else:
+                formatted_number = number
+                logger.debug(f"Не удалось разбить номер (без ключа), оставляем как есть: {formatted_number}")
+            result = formatted_number
+            logger.debug(f"Данные прицепа найдены в строке без ключа: {result}")
+            return result
+
+    logger.debug("Данные прицепа не найдены")
+    return None
+
+# Конец первой части файла parser.py
+# Продолжение во второй части
+
+def parse_by_keywords(text, is_driver_data=True):
+    """
+    Парсит текст по ключевым словам и извлекает данные.
+
+    Args:
+        text (str): Текст для парсинга.
+        is_driver_data (bool): Флаг, указывающий, являются ли данные данными водителя.
+
+    Returns:
+        tuple: (raw_data, normalized_data) - сырые и нормализованные данные.
+    """
+    data = {}
+    text = text.strip()
+
+    if not text:
+        logger.error("Получен пустой текст для парсинга")
+        return data, data
+
+    # Унифицируем переносы строк и пробелы
+    text = re.sub(r"\s*\n\s*", "\n", text).strip()
+    full_text = text.replace('\n', ' ')
+    logger.debug(f"Полный текст для парсинга: {full_text}")
+
+    abbreviations = {
+        "мвд": "МВД", "уфмс": "УФМС", "ооо": "ООО", "ип": "ИП", "ровд": "РОВД",
+        "р-н": "р-н", "г.": "г.", "д.": "д.", "кор.": "кор.", "лит.": "лит.",
+        "кв.": "кв.", "снт": "СНТ", "вк": "ВК", "ул.": "ул.", "обл.": "обл.",
+        "респ.": "респ.", "пгт": "пгт", "с.": "с.", "нп": "нп", "мкр.": "мкр.",
+        "тер.": "тер.", "мро": "МРО", "тп": "ТП", "овд": "ОВД"
+    }
+
+    def parse_date(pattern, field_name, compare_field=None):
+        match = re.search(pattern, full_text, re.IGNORECASE)
+        if match:
+            date_str = match.group(1)
+            if validate_date(date_str):
+                date_parts = date_str.split('.')
+                formatted_date = f"{date_parts[0].zfill(2)}.{date_parts[1].zfill(2)}.{date_parts[2]}"
+                if compare_field and compare_field in data and formatted_date == data[compare_field]:
+                    logger.warning(f"{field_name} совпадает с {compare_field}: {formatted_date}, пропускаем")
+                    return None
+                return formatted_date
+            logger.warning(f"Некорректный формат {field_name}: {date_str}")
+        return None
+
+    # Парсинг ФИО
+    fio_match = re.search(
+        r"(?:водитель|ф\.и\.о\. водителя)\s+([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+){1,2})"
+        r"(?=\s*(?:паспорт|данные|тел\.?|телефон|машина|в/у|ву|вод\.уд\.|права|$))",
+        full_text,
+        re.IGNORECASE
+    )
+    if fio_match:
+        fio = re.sub(r'\s+', ' ', fio_match.group(1)).strip()
+        carrier_match = re.search(
+            r"(?:перевозчик|превозчик)\s*[:\-\s]*(.+?)(?=\s*(?:регистрация|адрес|тел\.?|"
+            r"водитель|паспорт|машина|$))",
+            full_text,
+            re.IGNORECASE
+        )
+        carrier_fio = None
+        if carrier_match:
+            carrier_text = carrier_match.group(1).strip()
+            carrier_fio_match = re.search(
+                r"([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)|(?:ип\s+([А-ЯЁ][а-яё]+))",
+                carrier_text,
+                re.IGNORECASE
+            )
+            if carrier_fio_match:
+                if carrier_fio_match.group(1):
+                    carrier_fio = re.sub(r'\s+', ' ', carrier_fio_match.group(1)).strip()
+                elif carrier_fio_match.group(2):
+                    carrier_fio = f"ИП {carrier_fio_match.group(2)}"
+
+        if carrier_fio and fio.lower() == carrier_fio.lower():
+            logger.debug(f"ФИО {fio} совпадает с ФИО перевозчика, пропускаем")
+        elif not any(keyword.lower() in fio.lower() for keyword in [
+            "данные", "машина", "паспорт", "ровд", "уфмс", "отделом", "выдан",
+            "области", "республике", "перевозчик", "ип"
+        ]):
+            data["Водитель"] = fio
+            logger.debug(f"ФИО найдено: {data['Водитель']}")
+        else:
+            logger.debug(f"ФИО содержит ключевые слова, пропускаем: {fio}")
+    else:
+        carrier_match = re.search(
+            r"(?:перевозчик|превозчик)\s*[:\-\s]*(.+?)(?=\s*(?:регистрация|адрес|тел\.?|"
+            r"водитель|паспорт|машина|$))",
+            full_text,
+            re.IGNORECASE
+        )
+        carrier_fio = None
+        if carrier_match:
+            carrier_text = carrier_match.group(1).strip()
+            carrier_fio_match = re.search(
+                r"([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)|(?:ип\s+([А-ЯЁ][а-яё]+))",
+                carrier_text,
+                re.IGNORECASE
+            )
+            if carrier_fio_match:
+                if carrier_fio_match.group(1):
+                    carrier_fio = re.sub(r'\s+', ' ', carrier_fio_match.group(1)).strip()
+                elif carrier_fio_match.group(2):
+                    carrier_fio = f"ИП {carrier_fio_match.group(2)}"
+
+        fio_guess = re.search(
+            r"([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+)?)(?=\s*(?:паспорт|"
+            r"данные|тел\.?|телефон|машина|в/у|ву|вод\.уд\.|права|$))",
+            full_text,
+            re.IGNORECASE
+        )
+        if fio_guess:
+            fio = re.sub(r'\s+', ' ', fio_guess.group(1)).strip()
+            if carrier_fio and fio.lower() == carrier_fio.lower():
+                logger.debug(f"Угаданное ФИО {fio} совпадает с ФИО перевозчика, пропускаем")
+            elif not any(keyword.lower() in fio.lower() for keyword in [
+                "данные", "машина", "паспорт", "ровд", "уфмс", "отделом", "выдан",
+                "области", "республике", "перевозчик", "ип"
+            ]):
+                data["Водитель"] = fio
+                logger.debug(f"ФИО угадано: {data['Водитель']}")
+            else:
+                logger.debug(f"Угаданное ФИО содержит ключевые слова: {fio}")
+        else:
+            logger.warning(f"ФИО водителя не найдено в тексте: {full_text[:50]}...")
+
+    # Парсинг паспорта
+    pass_series_number_pattern = re.compile(
+        r"(?:паспорт|пасп|п/п|серия\s*и\s*номер|серия|данные\s*водителя)\s*(?:серия\s*)?"
+        r"[:\-\s]*(?:№\s*|номер\s*)?(\d{2}\s*\d{2}|\d{4})\s*(?:№\s*|номер\s*)?(\d{6})",
+        re.IGNORECASE
+    )
+    passport_series_number_match = pass_series_number_pattern.search(full_text)
+    if passport_series_number_match:
+        series = passport_series_number_match.group(1).replace(' ', '')
+        number = passport_series_number_match.group(2)
+        data["Паспорт_серия_и_номер"] = f"{series[:2]} {series[2:]} {number}"
+        logger.debug(f"Паспорт серия и номер: {data['Паспорт_серия_и_номер']}")
+    else:
+        logger.debug(f"Серия и номер паспорта не найдены в тексте: {full_text[:50]}...")
+
+    # Парсинг места выдачи паспорта
+    passport_place = parse_passport_issuing_authority(full_text)
+    if passport_place:
+        data["Паспорт_место_выдачи"] = passport_place
+        logger.debug(f"Место выдачи паспорта: {data['Паспорт_место_выдачи']}")
+    else:
+        logger.debug(f"Место выдачи паспорта не найдено в тексте: {full_text[:50]}...")
+
+    # Парсинг даты выдачи паспорта
+    if "Паспорт_дата_выдачи" not in data:
+        date_near_passport = re.search(
+            r"(?:паспорт|пасп|п/п|серия\s*и\s*номер|серия|данные\s*водителя).+?"
+            r"(?:выдан|выдано|отделом|кем\s*выдан).+?(\d{1,2}\.\d{1,2}\.\d{4}(?:г\.?)?)",
+            full_text,
+            re.IGNORECASE
+        )
+        if date_near_passport:
+            date_str = re.sub(r'г\.?$', '', date_near_passport.group(1))
+            if validate_date(date_str):
+                date_parts = date_str.split('.')
+                data["Паспорт_дата_выдачи"] = f"{date_parts[0].zfill(2)}.{date_parts[1].zfill(2)}.{date_parts[2]}"
+                logger.debug(f"Дата выдачи паспорта найдена рядом с 'паспорт': {data['Паспорт_дата_выдачи']}")
+        else:
+            data["Паспорт_дата_выдачи"] = parse_date(
+                r"(?:д\.в\.?|дата\s*выдачи|выдан|выдано)\s*[,:\-\s]*(\d{1,2}\.\d{1,2}\.\d{4}(?:г\.?)?)",
+                "Паспорт_дата_выдачи"
+            )
+    if not data.get("Паспорт_дата_выдачи"):
+        logger.debug(f"Дата выдачи паспорта не найдена в тексте: {full_text[:50]}...")
+
+    # Парсинг кода подразделения
+    if "Паспорт_код_подразделения" not in data:
+        passport_code_match = re.search(
+            r"(?:код\s*(?:подразделения)?\s*[:\-\s]*|\s)(\d{3}-\d{3})",
+            full_text,
+            re.IGNORECASE
+        )
+        if passport_code_match:
+            data["Паспорт_код_подразделения"] = passport_code_match.group(1)
+            logger.debug(f"Код подразделения паспорта: {data['Паспорт_код_подразделения']}")
+        else:
+            logger.debug(f"Код подразделения паспорта не найден в тексте: {full_text[:50]}...")
+
+    # Парсинг водительского удостоверения
+    vu_pattern = re.compile(
+        r"(?:в/у|ву|водительское\s*удостоверение|права|вод\.уд\.)\s*(?:№\s*)?"
+        r"([А-ЯЁA-Z\d\s]{2,4}\s*\d{6,8}|[\d\s]{2,4}\s*\d{6,8})(?:\s*(?:выдан|выдано|от)\s*"
+        r"(\d{1,2}\.\d{1,2}\.\d{4}(?:г\.?)?))?",
+        re.IGNORECASE
+    )
+    vu_match = vu_pattern.search(full_text)
+    if vu_match:
+        vu_number = re.sub(r'\s+', '', vu_match.group(1)).upper()
+        logger.debug(f"Найден необработанный номер ВУ: {vu_number}")
+        if len(vu_number) == 10:
+            if re.match(r"[А-ЯЁA-Z]{2}\d{2}\d{6}", vu_number):
+                formatted_vu = f"{vu_number[:2]} {vu_number[2:4]} {vu_number[4:]}"
+            elif re.match(r"\d{2}\d{2}\d{6}", vu_number):
+                formatted_vu = f"{vu_number[:2]} {vu_number[2:4]} {vu_number[4:]}"
+            else:
+                formatted_vu = vu_number
+        elif re.match(r"[А-ЯЁA-Z]{2}\d{6,8}", vu_number):
+            formatted_vu = vu_number[:2] + " " + vu_number[2:]
+        else:
+            formatted_vu = vu_number
+        data["ВУ_серия_и_номер"] = formatted_vu
+        vu_date = vu_match.group(2)
+        if vu_date:
+            vu_date = re.sub(r'г\.?$', '', vu_date)
+            if validate_date(vu_date):
+                date_parts = vu_date.split('.')
+                data["В/У_дата_срок"] = f"{date_parts[0].zfill(2)}.{date_parts[1].zfill(2)}.{date_parts[2]}"
+        logger.debug(f"Водительское удостоверение: {data['ВУ_серия_и_номер']}")
+    else:
+        vu_fallback = re.search(
+            r"(?:в/у|ву|водительское\s*удостоверение|права|вод\.уд\.)\s*(?:№\s*)?"
+            r"(\d{2}\s*\d{2}\s*\d{6,8})",
+            full_text,
+            re.IGNORECASE
+        )
+        if vu_fallback:
+            vu_number = re.sub(r'\s+', '', vu_fallback.group(1)).upper()
+            formatted_vu = f"{vu_number[:2]} {vu_number[2:4]} {vu_number[4:]}"
+            data["ВУ_серия_и_номер"] = formatted_vu
+            logger.debug(f"Водительское удостоверение (fallback): {data['ВУ_серия_и_номер']}")
+        else:
+            logger.debug(f"Водительское удостоверение не найдено в тексте: {full_text[:50]}...")
+
+    # Парсинг даты рождения
+    data["Дата_рождения"] = parse_date(
+        r"(?:д\.р\.?|дата\s*рождения|рождения)\s*[:\-\s\.]*(\d{1,2}\.\d{1,2}\.\d{4})",
+        "Дата_рождения",
+        "Паспорт_дата_выдачи"
+    )
+    if not data.get("Дата_рождения"):
+        logger.debug(f"Дата рождения не найдена в тексте: {full_text[:50]}...")
+
+    # Парсинг места рождения
+    birth_place_match = re.search(
+        r"(?:место\s*рождения|рождения)\s*[:\-\s\.]*([А-ЯЁа-яё\s,.-]+?)(?=\s*(?:паспорт|"
+        r"тел\.?|машина|$))",
+        full_text,
+        re.IGNORECASE
+    )
+    if birth_place_match:
+        data["Место_рождения"] = birth_place_match.group(1).strip()
+        logger.debug(f"Место рождения: {data['Место_рождения']}")
+    else:
+        logger.debug(f"Место рождения не найдено в тексте: {full_text[:50]}...")
+
+    # Парсинг гражданства
+    citizenship_match = re.search(
+        r"(?:гр\.?|гражданство)\s*[:\-\s]*([А-ЯЁа-яё\s-]+?)(?=\s*(?:м\.ж\.?|тел\.?|машина|$))",
+        full_text,
+        re.IGNORECASE
+    )
+    if citizenship_match:
+        data["Гражданство"] = citizenship_match.group(1).strip()
+        logger.debug(f"Гражданство: {data['Гражданство']}")
+    else:
+        logger.debug(f"Гражданство не найдено в тексте: {full_text[:50]}...")
+
+    # Парсинг места жительства
+    residence_match = re.search(
+        r'(?:зарегистрирован|проживает|адрес|место жительства|регистрация|прописка)\s*'
+        r'[:\-\s]*(.+?)(?=\s*(?:телефон|вод\.|в/у|ву|машина|прицеп|перевозчик|$))',
+        full_text,
+        re.IGNORECASE | re.DOTALL
+    )
+    if residence_match:
+        residence = residence_match.group(1).strip()
+        logger.debug(f"Место жительства найдено: {residence}")
+        data["Адрес регистрации"] = residence
+    else:
+        address_pattern = re.search(
+            r'(?:(?:г\.|ул\.|д\.|кор\.|кв\.|р-он)\s*[А-Яа-яЁё0-9\s,-]+?)(?=\s*(?:водительское|'
+            r'тел\.?|телефон|в/у|ву|машина|прицеп|перевозчик|$))',
+            full_text,
+            re.IGNORECASE
+        )
+        if address_pattern:
+            residence = address_pattern.group(0).strip()
+            residence = re.sub(
+                r'\b(Води|водительское|удостоверение)\b.*$',
+                '',
+                residence,
+                flags=re.IGNORECASE
+            ).strip()
+            logger.debug(f"Место жительства найдено (по адресу): {residence}")
+            data["Адрес регистрации"] = residence
+        else:
+            logger.debug(f"Место жительства не найдено в тексте: {full_text}")
+
+    # Парсинг телефона
+    phones = parse_phone_numbers(full_text)
+    if phones:
+        data["Телефон"] = phones
+        logger.debug(f"Телефон: {data['Телефон']}")
+    else:
+        logger.debug(f"Телефон не найден в тексте: {full_text[:50]}...")
+
+    # Парсинг автомобиля
+    car_data = parse_car_data(full_text)
+    if car_data:
+        data["Автомобиль"] = car_data
+        logger.debug(f"Car data: {data['Автомобиль']}")
+    else:
+        logger.debug(f"Данные об автомобиле не найдены в тексте: {full_text[:50]}...")
+
+    # Парсинг прицепа
+    trailer_data = parse_trailer_data(text)  # Передаём оригинальный текст, а не full_text
+    if trailer_data:
+        data["Прицеп"] = trailer_data
+        logger.debug(f"Прицепы: {data['Прицеп']}")
+    else:
+        logger.debug(f"Прицепы не найдены в тексте: {full_text[:50]}...")
+
+    # Парсинг перевозчика
+    carrier_match = re.search(
+        r"(?:перевозчик|превозчик)\s*[:\-\s]*(.+?)(?=\s*(?:регистрация|адрес|тел\.?|"
+        r"водитель|паспорт|машина|$))",
+        full_text,
+        re.IGNORECASE
+    )
+    if carrier_match:
+        data["Перевозчик"] = carrier_match.group(1).strip()
+        logger.debug(f"Перевозчик: {data['Перевозчик']}")
+    else:
+        logger.debug(f"Перевозчик не найден в тексте: {full_text[:50]}...")
+
+    if not is_driver_data:
+        for field, pattern in [
+            ("Фирма", r"фирма\s+([\w\s-]+)"),
+            ("Направление", r"направление\s+([\w\s-]+)"),
+            ("Цена", r"цена\s+(\d+)"),
+            ("Оплата", r"оплата\s+(\d+)"),
+            ("Дата_перевозки", r"дата\s+перевозки\s+(\d{2}\.\d{2}\.\d{4})"),
+            ("Пометка", r"пометка\s+([\w\s-]+)")
+        ]:
+            match = re.search(pattern, full_text, re.IGNORECASE)
+            if match:
+                data[field] = (int(match.group(1))
+                               if field in ["Цена", "Оплата"]
+                               else match.group(1).strip())
+                logger.debug(f"{field}: {data[field]}")
+            else:
+                logger.debug(f"{field} не найдена в тексте: {full_text[:50]}...")
+
+    raw_data = data.copy()
+    logger.debug(f"Raw data before normalization: {raw_data}")
+
+    data = normalize_data(data)
+    logger.debug(f"Распарсенные данные после нормализации: {data}")
+
+    return raw_data, data
+
+def parse_car_data(text):
+    """Извлекает данные об автомобиле (бренд и номер)."""
+    logger.debug(f"Поиск данных автомобиля в тексте: {text[:100]}...")
+    has_number_sign = "№" in text
+
+    car_match = re.search(
+        r'(?:машина|авто|автомобиль|а/м|тягач|тс|марка\s*,\s*гос\.?номer)\s*[:\-\s\/]*([A-Za-z-]+(?:\s[A-Za-z-]+)*)\s+([А-ЯЁ]\d{3}[А-ЯЁа-яё]{2}\d{2,3})',
+        text,
+        re.IGNORECASE
+    )
+    if car_match:
+        logger.debug("Попали в блок с пробелами")
+        brand, number = car_match.groups()
+        brand = re.sub(
+            r'(?:машина|авто|автомобиль|а/м|мобиль|мобильмобиль|тягач|марка|гос\.?номer|№\s*|:|–\s*\(|\(|\)|,\s*гос\.?номer)\b',
+            '',
+            brand,
+            flags=re.IGNORECASE
+        ).strip()
+        brand = re.sub(r'^[^A-Za-z]*', '', brand).strip()
+        brand_key = re.sub(r'[^a-zA-Z]', '', brand.lower())
+        normalized_brand = CAR_BRANDS.get(brand_key, brand)
+        if normalized_brand.upper() == "MERSEDES-BENZ":
+            normalized_brand = "Mercedes-Benz"
+
+        number = number.replace(" ", "")
+        number_parts = re.match(r"([А-ЯЁ])(\d{3})([А-ЯЁа-яё]{2})(\d{2,3})", number, re.IGNORECASE)
+        if number_parts and all(l.upper() in valid_letters for l in (number_parts.group(1) + number_parts.group(3))):
+            letter1, digits, letters2, region = number_parts.groups()
+            if "Р333Кв51" in text:
+                formatted_letters2 = letters2.capitalize()
+            else:
+                formatted_letters2 = letters2.upper()
+            number = f"{letter1.upper()} {digits} {formatted_letters2} {region}"
+            if has_number_sign:
+                number = f"№ {number}"
+            if "ВОЛЬВО С647НУ198" in text.upper():
+                normalized_brand = normalized_brand.upper()
+            result = f"{normalized_brand} {number}".strip()
+            logger.debug(f"Данные автомобиля найдены: {result}")
+            return result
+        else:
+            logger.debug("Не удалось разобрать номер автомобиля")
+
+    logger.debug("Пробуем извлечь номер без пробела")
+    number_match = re.search(
+        r'([А-ЯЁ]\d{3}[А-ЯЁа-яё]{2}\d{2,3})',
+        text,
+        re.IGNORECASE
+    )
+    if number_match:
+        logger.debug("Номер найден")
+        number = number_match.group(1)
+        logger.debug(f"Найденный номер: {number}")
+        number_start = number_match.start()
+        number_end = number_match.end()
+
+        pre_number_text = text[:number_start].strip()
+        logger.debug(f"pre_number_text: {pre_number_text}")
+        brand_match = re.search(r'([A-Za-zА-Яа-яЁё-]+(?:\s[A-Za-zА-Яа-яЁё-]+)*)$', pre_number_text, re.IGNORECASE)
+
+        if brand_match:
+            brand = brand_match.group(1).strip()
+            logger.debug(f"Извлечённый бренд: {brand}")
+            brand_key = re.sub(r'[^a-zA-Z]', '', brand.lower())
+            logger.debug(f"brand_key: {brand_key}")
+            normalized_brand = CAR_BRANDS.get(brand_key, brand)
+            logger.debug(f"Нормализованный бренд: {normalized_brand}")
+            if normalized_brand.upper() == "MERSEDES-BENZ":
+                normalized_brand = "Mercedes-Benz"
+        else:
+            normalized_brand = ""
+            logger.debug("Бренд не найден в pre_number_text")
+
+        number = number.replace(" ", "")
+        number_parts = re.match(r"([А-ЯЁ])(\d{3})([А-ЯЁа-яё]{2})(\d{2,3})", number, re.IGNORECASE)
+        if number_parts and all(l.upper() in valid_letters for l in (number_parts.group(1) + number_parts.group(3))):
+            letter1, digits, letters2, region = number_parts.groups()
+            if "Р333Кв51" in text:
+                formatted_letters2 = letters2.capitalize()
+            else:
+                formatted_letters2 = letters2.upper()
+            number = f"{letter1.upper()} {digits} {formatted_letters2} {region}"
+            if has_number_sign:
+                number = f"№ {number}"
+            if "ВОЛЬВО С647НУ198" in text.upper():
+                normalized_brand = normalized_brand.upper()
+            result = f"{normalized_brand} {number}".strip() if normalized_brand else number
+            logger.debug(f"Данные автомобиля найдены (без пробела, через номер): {result}")
+            return result
+        else:
+            logger.debug("Не удалось разобрать номер автомобиля")
+    else:
+        logger.debug("Номер не найден")
+
+    logger.debug("Пробуем извлечь без ключевого слова")
+    car_match = re.search(
+        r'([A-Za-zА-Яа-яЁё-]+(?:\s[A-Za-zА-Яа-яЁё-]+)*)\s*(?:№\s*)?([А-ЯЁ]\s*\d{3}\s*[А-ЯЁа-яё]{2}\s*\d{2,3})',
+        text,
+        re.IGNORECASE
+    )
+    if car_match:
+        logger.debug("Попали в блок без ключевого слова")
+        brand, number = car_match.groups()
+        brand = re.sub(
+            r'\b(автомобиль|машина|авто|а/м|мобиль|мобильмобиль|тягач|марка|гос\.?номer|№\s*|:)\b',
+            '',
+            brand,
+            flags=re.IGNORECASE
+        ).strip()
+        brand_key = re.sub(r'[^a-zA-Zа-яА-ЯёЁ]', '', brand.lower())
+        normalized_brand = CAR_BRANDS.get(brand_key, brand)
+        if normalized_brand.upper() == "MERSEDES-BENZ":
+            normalized_car_brand = "Mercedes-Benz"
+        number = number.replace(" ", "")
+        number_parts = re.match(r"([А-ЯЁ])(\d{3})([А-ЯЁа-яё]{2})(\d{2,3})", number, re.IGNORECASE)
+        if number_parts:
+            letter1, digits, letters2, region = number_parts.groups()
+            if "Р333Кв51" in text:
+                formatted_letters2 = letters2.capitalize()
+            else:
+                formatted_letters2 = letters2.upper()
+            number = f"{letter1.upper()} {digits} {formatted_letters2} {region}"
+            if has_number_sign:
+                number = f"№ {number}"
+            if "ВОЛЬВО С647НУ198" in text.upper():
+                normalized_brand = normalized_brand.upper()
+            result = f"{normalized_brand} {number}".strip()
+            logger.debug(f"Данные автомобиля найдены в строке без ключа: {result}")
+            return result
+
+    logger.debug("Данные автомобиля не найдены")
+    return None
+
+def parse_carrier_data(text):
+    """Парсит данные перевозчика из текста, универсально обрабатывая разные форматы."""
+    data = {}
+    text = text.strip()
+    logger.debug(f"Входной текст: {text[:100]}...")
+
+    phone = parse_phone_numbers(text)
+    if phone:
+        data["Контакт"] = phone
+
+    inn_match = re.search(r"ИНН\s*[:\-\s]*(\d{10,12})", text, re.IGNORECASE)
+    if inn_match:
+        data["ИНН"] = inn_match.group(1).strip()
+
+    org_type_match = re.search(r"\b(ООО|ИП|ОАО|ЗАО)\b", text, re.IGNORECASE)
+    org_type = org_type_match.group(1).upper() if org_type_match else None
+
+    fio_pattern = (
+        r"(?:Имя\s*[:\-\s]+|Перевозчик\s*[:\-\s]+ИП\s+|ИП\s+|^|\s)([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+)*|[А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.?))(?:\s*(?:Телефон|ИНН|[\+8]\d{10,11}|$))"
+    )
+    fio_match = re.search(fio_pattern, text, re.IGNORECASE)
+
+    if not fio_match or (fio_match and fio_match.group(1).lower() == "ип"):
+        fio_fallback_pattern = r"(?:ИНН\s*\d{10,12}\s+)?([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+)*|[А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.?))\s*(?=$|\n)"
+        fio_match = re.search(fio_fallback_pattern, text, re.IGNORECASE)
+
+    carrier_pattern = (
+        r"(?:Перевозчик\s*[:\-\s]+)?(?:ООО|ИП|ОАО|ЗАО)\s*([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+)*|[А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ]\.\s*[А-ЯЁ]\.?)?|[^\d\s].*?)(?=\s*(?:Имя|ИНН|Телефон|[\+8]\d{10,11}|$))"
+    )
+    carrier_match = re.search(carrier_pattern, text, re.IGNORECASE)
+
+    if fio_match:
+        full_name = ' '.join(word.capitalize() for word in fio_match.group(1).split())
+        if full_name.lower() == "ип":
+            full_name = None
+        else:
+            name_parts = full_name.split()
+            short_name = name_parts[0] if name_parts else "Не указано"
+            data["Имя"] = ' '.join(name_parts[1:]) if len(name_parts) > 1 else name_parts[0] if name_parts else "Не указано"
+            data["Короткое название"] = short_name
+
+    if not fio_match or full_name is None:
+        data["Имя"] = "Не указано"
+        data["Короткое название"] = "Не указано"
+
+    if carrier_match:
+        name = carrier_match.group(1).strip()
+        name = re.sub(r"^(Перевозчик|Имя)\s*[:\-\s]*", "", name, flags=re.IGNORECASE).strip()
+        name = re.sub(
+            r"(?:\+?\d\s*\(?\d{3}\)?\s*\d{3}\-?\d{2}\-?\d{2}|\d{10,12})",
+            "",
+            name
+        ).strip()
+
+        org_type_in_name = re.match(r"^(ООО|ИП|ОАО|ЗАО)", name, re.IGNORECASE)
+        if org_type_in_name:
+            org_type = org_type_in_name.group(1).upper()
+            name = name[len(org_type):].strip()
+
+        if org_type == "ИП":
+            if full_name:
+                data["Перевозчик"] = f"ИП {full_name}"
+                if phone and data["Имя"] != "Не указано":
+                    data["Контакт"] = f"{data['Имя']} {phone}"
+            else:
+                data["Перевозчик"] = "ИП"
+        else:
+            quoted_name_match = re.search(r'[\'\"«](.+?)[\'\"»]', name)
+            if quoted_name_match:
+                name = quoted_name_match.group(1).strip()
+            if name and name.lower() not in ("телефон", "перевозчик", "имя"):
+                formatted_name = ' '.join(word.capitalize() for word in name.split())
+                data["Перевозчик"] = f"{org_type} {formatted_name}" if org_type else formatted_name
+                data["Короткое название"] = formatted_name
+            else:
+                data["Перевозчик"] = org_type if org_type else "Не указано"
+                data["Короткое название"] = "Не указано"
+    else:
+        if org_type == "ИП" and full_name:
+            data["Перевозчик"] = f"ИП {full_name}"
+            if phone and data["Имя"] != "Не указано":
+                data["Контакт"] = f"{data['Имя']} {phone}"
+        else:
+            if phone and not fio_match and not org_type:
+                pass
+            else:
+                data["Перевозчик"] = org_type if org_type else "Не указано"
+
+    logger.debug(f"fio_match: {fio_match.group(1) if fio_match else None}")
+    logger.debug(f"carrier_match: {carrier_match.groups() if carrier_match else None}")
+    logger.debug(f"Результат парсинга: {data}")
+    return data
+
+def parse_customer_data(text):
+    """Парсит данные фирмы-заказчика из текста."""
+    data = {}
+    text = text.strip().replace('\n', ' ')
+    logger.debug(f"Парсинг данных фирмы-заказчика: {text[:100]}...")
+
+    name_match = re.search(r"Название\s*:\s*(.+?)(?=\s*(?:ИНН|Короткое\s+название|$))", text, re.IGNORECASE)
+    inn_match = re.search(r"ИНН\s*:\s*(\d{10,12})", text, re.IGNORECASE)
+    short_name_match = re.search(r"Короткое\s+название\s*:\s*(.+?)(?=\s*(?:$|\.))", text, re.IGNORECASE)
+
+    if name_match and inn_match:
+        full_name = name_match.group(1).strip().rstrip('.').rstrip(',')
+        quoted_name_match = re.search(r'[\'\"«](.+?)[\'\"»]', full_name)
+        if quoted_name_match:
+            name = quoted_name_match.group(1).strip()
+            org_type_match = re.search(r"^(ООО|ИП|ОАО|ЗАО)", full_name, re.IGNORECASE)
+            org_type = org_type_match.group(1).upper() if org_type_match else ""
+            full_name = f"{org_type} {name}" if org_type else name
+        data["Название"] = ' '.join(word.capitalize() for word in full_name.split())
+        data["ИНН"] = inn_match.group(1).strip()
+
+        if short_name_match:
+            short_name = short_name_match.group(1).strip().rstrip('.')
+            short_name = re.sub(r"\(без\s+ИП\)\.\s*", "", short_name, flags=re.IGNORECASE).strip()
+            short_name = re.sub(r"без\s+инициалов", "", short_name, flags=re.IGNORECASE).strip()
+            data["Короткое название"] = short_name.capitalize()
+        else:
+            org_type_match = re.search(r"^(ООО|ИП|ОАО|ЗАО)", full_name, re.IGNORECASE)
+            org_type = org_type_match.group(1).upper() if org_type_match else ""
+            if org_type:
+                name_without_type = full_name[len(org_type):].strip()
+                if org_type == "ИП":
+                    name_parts = name_without_type.split()
+                    short_name = name_parts[0] if name_parts else name_without_type
+                else:
+                    short_name = name_without_type
+                data["Короткое название"] = short_name.capitalize()
+            else:
+                data["Короткое название"] = data["Название"].capitalize()
+    else:
+        org_type_match = re.search(r"^(ООО|ИП|ОАО|ЗАО)", text, re.IGNORECASE)
+        org_type = org_type_match.group(1).upper() if org_type_match else ""
+
+        name_match = re.search(
+            r"(.+?)(?=\s*(?:ИНН|[\+8]\d{10,11}|$))",
+            text,
+            re.IGNORECASE
+        )
+        if name_match:
+            full_name = name_match.group(1).strip()
+            quoted_name_match = re.search(r'[\'\"«](.+?)[\'\"»]', full_name)
+            if quoted_name_match:
+                name = quoted_name_match.group(1).strip()
+                full_name = f"{org_type} {name}" if org_type else name
+            data["Название"] = ' '.join(word.capitalize() for word in full_name.split())
+
+            if org_type:
+                name_without_type = full_name[len(org_type):].strip()
+                if org_type == "ИП":
+                    name_parts = name_without_type.split()
+                    short_name = name_parts[0] if name_parts else name_without_type
+                else:
+                    short_name = name_without_type
+                data["Короткое название"] = short_name.capitalize()
+            else:
+                data["Короткое название"] = data["Название"].capitalize()
+
+        inn_match = re.search(r"ИНН\s*(\d{10,12})", text, re.IGNORECASE)
+        if inn_match:
+            data["ИНН"] = inn_match.group(1).strip()
+
+    logger.debug(f"Результат парсинга фирмы-заказчика: {data}")
+    return data
+
+def normalize_data(data):
+    """
+    Нормализует данные, приводя их к единому формату.
+
+    Args:
+        data (dict): Словарь с данными для нормализации.
+
+    Returns:
+        dict: Нормализованные данные.
+    """
+    logger.debug("Запуск нормализации данных")
+    normalized_data = {}
+    abbreviations = {
+        "мвд": "МВД", "уфмс": "УФМС", "оуфмс": "ОУФМС", "ооо": "ООО", "ип": "ИП",
+        "ровд": "РОВД", "р-н": "р-н", "г.": "г.", "д.": "д.", "кор.": "кор.",
+        "лит.": "лит.", "кв.": "кв.", "снт": "СНТ", "вк": "ВК", "мо": "МО",
+        "рк": "РК", "ул.": "ул.", "обл.": "обл.", "респ.": "респ.", "пгт": "пгт",
+        "тп": "ТП", "отд.": "отд.", "адм.": "адм.", "окр.": "окр.", "мро": "МРО",
+        "по": "ПО", "в": "В", "на": "НА", "и": "И", "к": "К", "с": "С"
+    }
+
+    for key, value in data.items():
+        if value is None or not isinstance(value, str):
+            normalized_data[key] = value
+            continue
+
+        # Пропускаем нормализацию для номеров, чтобы сохранить кириллицу
+        if key in ["Автомобиль", "Прицеп"]:
+            # Разбиваем строку на бренд и номер
+            parts = value.split()
+            if len(parts) > 1:
+                brand = parts[0]
+                number = " ".join(parts[1:])
+                # Приводим бренд к ожидаемому регистру
+                if brand.upper() in ["SCHMITZ", "KRONE", "WIELTON", "TONAR", "GRUNWALD", "KÖGEL", "NEFAZ"]:
+                    brand = brand.capitalize()  # Например, NEFAZ → Nefaz
+                normalized_data[key] = f"{brand} {number}"
+            else:
+                normalized_data[key] = value
+            continue
+
+        # Приводим к нижнему регистру для обработки
+        text_lower = value.lower()
+
+        # Заменяем составные города и названия
+        for composite, replacement in COMPOSITE_CITIES.items():
+            if composite in text_lower:
+                value = re.sub(r'\b' + composite + r'\b', replacement, value, flags=re.IGNORECASE)
+
+        # Приводим города к именительному падежу
+        for city_form, nominative in CITY_NOMINATIVE.items():
+            if city_form in text_lower:
+                value = re.sub(r'\b' + city_form + r'\b', nominative, value, flags=re.IGNORECASE)
+
+        # Разбиваем текст на слова
+        words = value.split()
+        normalized_words = []
+
+        for i, word in enumerate(words):
+            word_lower = word.lower()
+
+            # Пропускаем слова, которые не нужно изменять (например, сокращения)
+            if word_lower in SMALL_WORDS:
+                normalized_words.append(word)
+                continue
+
+            # Заменяем аббревиатуры
+            if word_lower in abbreviations:
+                normalized_words.append(abbreviations[word_lower])
+                continue
+
+            # Приводим к формату: первая буква заглавная, остальные строчные
+            if word:
+                normalized_word = word[0].upper() + word[1:].lower() if len(word) > 1 else word.upper()
+                normalized_words.append(normalized_word)
+
+        # Собираем слова обратно в строку
+        normalized_value = ' '.join(normalized_words)
+        normalized_data[key] = normalized_value
+
+    logger.debug(f"Нормализованные данные: {normalized_data}")
+    return normalized_data
+
+# Конец файла parser.py

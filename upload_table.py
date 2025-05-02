@@ -26,11 +26,13 @@ df.to_excel(LOCAL_FILE_PATH, index=False, engine="openpyxl")
 # Инициализация Yandex Disk
 yadisk_client = yadisk.YaDisk(token=YANDEX_DISK_TOKEN)
 
+
 # Проверка существования директории на Яндекс.Диске
 def ensure_remote_directory_exists():
     remote_dir = os.path.dirname(REMOTE_FILE_PATH)
     if not yadisk_client.exists(remote_dir):
         yadisk_client.mkdir(remote_dir)
+
 
 # Загрузка файла на Яндекс.Диск
 def upload_to_yandex_disk():
@@ -40,6 +42,7 @@ def upload_to_yandex_disk():
         print(f"Файл успешно загружен на Яндекс.Диск: {REMOTE_FILE_PATH}")
     except Exception as e:
         print(f"Ошибка загрузки файла на Яндекс.Диск: {e}")
+
 
 # Основной блок
 if __name__ == "__main__":

@@ -12,15 +12,26 @@ REMOTE_FILE_PATH = "disk:/BotDocs/Transportation_Main.xlsx"
 # Инициализация Yandex Disk
 yadisk_client = yadisk.YaDisk(token=YANDEX_DISK_TOKEN)
 
+
 # Создание таблицы с обновлённой структурой
 def create_updated_table():
     try:
-        df = pd.DataFrame(columns=[
-            "Дата", "Фирма", "Маршрут",
-            "Водитель ФИО", "Марка машины", "Номер машины",
-            "Номер полуприцепа", "Телефон", "Перевозчик",
-            "Цена", "Оплата", "Разница"
-        ])
+        df = pd.DataFrame(
+            columns=[
+                "Дата",
+                "Фирма",
+                "Маршрут",
+                "Водитель ФИО",
+                "Марка машины",
+                "Номер машины",
+                "Номер полуприцепа",
+                "Телефон",
+                "Перевозчик",
+                "Цена",
+                "Оплата",
+                "Разница",
+            ]
+        )
         df.to_excel(LOCAL_FILE_PATH, index=False, engine="openpyxl")
         print(f"Файл {LOCAL_FILE_PATH} успешно создан с обновлённой структурой.")
 
@@ -34,6 +45,7 @@ def create_updated_table():
         print(f"Файл успешно загружен на Яндекс.Диск: {REMOTE_FILE_PATH}")
     except Exception as e:
         print(f"Ошибка: {e}")
+
 
 if __name__ == "__main__":
     create_updated_table()
